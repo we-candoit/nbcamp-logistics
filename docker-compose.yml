@@ -1,0 +1,123 @@
+#############################
+######   공통 환경 설정   ######
+#############################
+x-common-spring: &common-spring
+  init: true
+  image: bellsoft/liberica-openjdk-alpine:21
+  working_dir: /app
+  entrypoint: ["sh", "/entrypoint.sh"]
+  networks: [logistics-network]
+
+x-entrypoint-spring: &entrypoint-spring
+                       "./entrypoint.sh:/entrypoint.sh:ro"
+
+
+services:
+  #############################
+  ######   비즈니스 서비스   ######
+  #############################
+  user-service:
+    <<: *common-spring
+    container_name: user-service
+    env_file: ./logistics-envs/user-service.env
+    # ports: ["8082:8080"]
+    volumes:
+      - ./services/user-service:/app
+      - *entrypoint-spring
+    profiles: ["user"]
+
+  order-service:
+    <<: *common-spring
+    container_name: order-service
+    env_file: ./logistics-envs/order-service.env
+    # ports: ["8083:8080"]
+    volumes:
+      - ./services/order-service:/app
+      - *entrypoint-spring
+    profiles: ["order"]
+
+  delivery-service:
+    <<: *common-spring
+    container_name: delivery-service
+    env_file: ./logistics-envs/delivery-service.env
+    # ports: ["8084:8080"]
+    volumes:
+      - ./services/delivery-service:/app
+      - *entrypoint-spring
+    profiles: ["delivery"]
+
+  hub-service:
+    <<: *common-spring
+    container_name: hub-service
+    env_file: ./logistics-envs/hub-service.env
+    # ports: ["8085:8080"]
+    volumes:
+      - ./services/hub-service:/app
+      - *entrypoint-spring
+    profiles: ["hub"]
+
+  company-service:
+    <<: *common-spring
+    container_name: company-service
+    env_file: ./logistics-envs/company-service.env
+    # ports: ["8086:8080"]
+    volumes:
+      - ./services/company-service:/app
+      - *entrypoint-spring
+    profiles: ["company"]
+
+
+  #######################
+  ######   인프라    ######
+  #######################
+  eureka-server:
+    <<: *common-spring
+    container_name: eureka-server
+    env_file: ./logistics-envs/eureka-server.env
+    volumes:
+      - ./infra/eureka-server:/app
+      - *entrypoint-spring
+    ports: ["8081:8080"]
+    restart: always
+    profiles: ["infra"]
+
+  gateway-server:
+    <<: *common-spring
+    container_name: gateway-server
+    env_file: ./logistics-envs/gateway-server.env
+    volumes:
+      - ./infra/gateway-server:/app
+      - *entrypoint-spring
+    ports: ["8080:8080"]
+    restart: always
+    depends_on: [eureka-server]
+    profiles: ["gateway", "infra"]
+
+
+  ###########################
+  ######   데이터베이스   ######
+  ###########################
+  db-server:
+    container_name: db-server
+    image: postgres:16-alpine
+    env_file: ./logistics-envs/db-server.env
+    volumes:
+      - volume-db:/var/lib/postgresql/data
+      - ./infra/db-server/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - logistics-network
+    restart: always
+    init: true
+    profiles: ["infra"]
+
+
+networks:
+  logistics-network:
+    name: logistics-network
+    driver: bridge
+
+
+volumes:
+  volume-db:
+    name: volume-db
+    driver: local

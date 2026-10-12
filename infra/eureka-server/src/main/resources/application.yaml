@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: eureka
+
+eureka:
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${DISCOVERY_SERVER_NAME}:${DISCOVERY_SERVER_PORT}/eureka/
+  server:
+    #readWrite 캐시를 사용하도록 하여 등록 즉시 조회 가능하도록 설정
+    #서비스 등록 즉시 gateway를 조회할 수 있도록 설정한 것으로 프로덕션 환경에서는 변경 필요
+    use-read-only-response-cache: false
+  instance:
+    hostname: ${DISCOVERY_SERVER_NAME}
+
+server:
+  port: ${DISCOVERY_SERVER_PORT}
