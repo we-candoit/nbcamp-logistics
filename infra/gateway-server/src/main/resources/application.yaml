@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: gateway-server
+  cloud:
+    gateway.server.webflux:
+          discovery:
+            locator:
+              enabled: false        #서비스 이름으로 자동 라우트 생성 끔
+          routes:
+            - id: ${USER_SERVICE_NAME}
+              uri: lb://${USER_SERVICE_NAME}
+              predicates:
+                - Path=${USER_SERVICE_PATHS}
+
+            - id: ${HUB_SERVICE_NAME}
+              uri: lb://${HUB_SERVICE_NAME}
+              predicates:
+                - Path=${HUB_SERVICE_PATHS}
+
+            - id: ${COMPANY_SERVICE_NAME}
+              uri: lb://${COMPANY_SERVICE_NAME}
+              predicates:
+                - Path=${COMPANY_SERVICE_PATHS}
+
+            - id: ${ORDER_SERVICE_NAME}
+              uri: lb://${ORDER_SERVICE_NAME}
+              predicates:
+                - Path=${ORDER_SERVICE_PATHS}
+
+            - id: ${DELIVERY_SERVICE_NAME}
+              uri: lb://${DELIVERY_SERVICE_NAME}
+              predicates:
+                - Path=${DELIVERY_SERVICE_PATHS}
+
+server:
+  port: ${GATEWAY_SERVER_PORT}
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: http://${DISCOVERY_SERVER_NAME}:${DISCOVERY_SERVER_PORT}/eureka/
+  instance:
+    prefer-ip-address: true

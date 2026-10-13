@@ -20,51 +20,56 @@ services:
     <<: *common-spring
     container_name: user-service
     env_file: ./logistics-envs/user-service.env
-    ports: ["8082:8080"]
+    # ports: ["8082:8080"]
     volumes:
       - ./services/user-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
+    profiles: ["user"]
 
   order-service:
     <<: *common-spring
     container_name: order-service
     env_file: ./logistics-envs/order-service.env
-    ports: ["8083:8080"]
+    # ports: ["8083:8080"]
     volumes:
       - ./services/order-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
+    profiles: ["order"]
 
   delivery-service:
     <<: *common-spring
     container_name: delivery-service
     env_file: ./logistics-envs/delivery-service.env
-    ports: ["8084:8080"]
+    # ports: ["8084:8080"]
     volumes:
       - ./services/delivery-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
+    profiles: ["delivery"]
 
   hub-service:
     <<: *common-spring
     container_name: hub-service
     env_file: ./logistics-envs/hub-service.env
-    ports: ["8085:8080"]
+    # ports: ["8085:8080"]
     volumes:
       - ./services/hub-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
+    profiles: ["hub"]
 
   company-service:
     <<: *common-spring
     container_name: company-service
     env_file: ./logistics-envs/company-service.env
-    ports: ["8086:8080"]
+    # ports: ["8086:8080"]
     volumes:
       - ./services/company-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
+    profiles: ["company"]
 
 
 #######################
@@ -77,23 +82,20 @@ services:
     volumes:
       - ./infra/eureka-server:/app
       - *entrypoint-spring
-    ports: 
-      - "8081:8080"
+    # ports: ["8081:8080"]
     restart: always
 
-## api 게이트웨이 구성필요
-  # api-gateway:
-  #   container_name: api-gateway
-  #   volumes:
-  #     - ./infra/api-gateway:/app
-  #     - *entrypoint-spring
-  #   ports:
-  #     - "8080:8080"
-  #   <<: *common-spring
-  #   # restart: always
-  #   environment:
-  #     <<: [*env]
-  #     JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+  gateway-server:
+    <<: *common-spring
+    container_name: gateway-server
+    env_file: ./logistics-envs/gateway-server.env
+    volumes:
+      - ./infra/gateway-server:/app
+      - *entrypoint-spring
+    ports: ["8080:8080"]
+    depends_on: [eureka-server]
+    restart: always
+    profiles: ["gateway"]
 
 
 ###########################
@@ -109,6 +111,7 @@ services:
     networks:
         - logistics-network
     restart: always
+    init: true
 
 
 networks:
