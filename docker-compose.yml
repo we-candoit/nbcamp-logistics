@@ -2,6 +2,7 @@
 ######   공통 환경 설정   ######
 #############################
 x-common-spring: &common-spring
+  init: true
   image: bellsoft/liberica-openjdk-alpine:21
   working_dir: /app
   entrypoint: ["sh", "/entrypoint.sh"]
