@@ -1,4 +1,8 @@
+#############################
+######   공통 환경 설정   ######
+#############################
 x-common-spring: &common-spring
+  init: true
   image: bellsoft/liberica-openjdk-alpine:21
   working_dir: /app
   entrypoint: ["sh", "/entrypoint.sh"]
@@ -7,104 +11,77 @@ x-common-spring: &common-spring
 x-entrypoint-spring: &entrypoint-spring
   "./entrypoint.sh:/entrypoint.sh:ro"
 
-x-env: &env
-  DISCOVERY_SERVER_NAME: ${DISCOVERY_SERVER_NAME}
-  CONFIG_SERVER_NAME: ${CONFIG_SERVER_NAME}
-  DISCOVERY_SERVER_PORT: ${DISCOVERY_SERVER_PORT}
-  CONFIG_SERVER_PORT: ${CONFIG_SERVER_PORT}
-
-x-db-env: &db-env
-  DB_SERVER_NAME: ${DB_SERVER_NAME}
-  DB_SERVER_PORT: ${DB_SERVER_PORT}
-  POSTGRES_DB: ${POSTGRES_DB}
 
 services:
 #############################
 ######   비즈니스 서비스   ######
 #############################
   user-service:
+    <<: *common-spring
     container_name: user-service
+    env_file: ./logistics-envs/user-service.env
+    ports: ["8082:8080"]
     volumes:
       - ./services/user-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
-    <<: *common-spring
-    environment:
-      <<: [*env, *db-env]
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      DB_SCHEMA: ${DB_USER_SCHEMA}
-      DB_USERNAME: ${DB_USER_SCHEMA_USERNAME}
-      DB_PASSWORD: ${DB_USER_SCHEMA_PASSWORD}
 
   order-service:
+    <<: *common-spring
     container_name: order-service
+    env_file: ./logistics-envs/order-service.env
+    ports: ["8083:8080"]
     volumes:
       - ./services/order-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
-    <<: *common-spring
-    environment:
-      <<: [*env, *db-env]
-      DB_SCHEMA: ${DB_ORDER_SCHEMA}
-      DB_USERNAME: ${DB_ORDER_SCHEMA_USERNAME}
-      DB_PASSWORD: ${DB_ORDER_SCHEMA_PASSWORD}
-    restart: always
 
   delivery-service:
+    <<: *common-spring
     container_name: delivery-service
+    env_file: ./logistics-envs/delivery-service.env
+    ports: ["8084:8080"]
     volumes:
       - ./services/delivery-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
-    <<: *common-spring
-    environment:
-      <<: [*env, *db-env]
-      DB_SCHEMA: ${DB_DELIVERY_SCHEMA}
-      DB_USERNAME: ${DB_DELIVERY_SCHEMA_USERNAME}
-      DB_PASSWORD: ${DB_DELIVERY_SCHEMA_PASSWORD}
 
   hub-service:
+    <<: *common-spring
     container_name: hub-service
+    env_file: ./logistics-envs/hub-service.env
+    ports: ["8085:8080"]
     volumes:
       - ./services/hub-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
-    <<: *common-spring
-    environment:
-      <<: [*env, *db-env]
-      DB_SCHEMA: ${DB_HUB_SCHEMA}
-      DB_USERNAME: ${DB_HUB_SCHEMA_USERNAME}
-      DB_PASSWORD: ${DB_HUB_SCHEMA_PASSWORD}
 
   company-service:
+    <<: *common-spring
     container_name: company-service
+    env_file: ./logistics-envs/company-service.env
+    ports: ["8086:8080"]
     volumes:
       - ./services/company-service:/app
       - *entrypoint-spring
     depends_on: [eureka-server, db-server]
-    <<: *common-spring
-    environment:
-      <<: [*env, *db-env]
-      DB_SCHEMA: ${DB_COMPANY_SCHEMA}
-      DB_USERNAME: ${DB_COMPANY_SCHEMA_USERNAME}
-      DB_PASSWORD: ${DB_COMPANY_SCHEMA_PASSWORD}
 
 
 #######################
 ######   인프라    ######
 #######################
   eureka-server:
+    <<: *common-spring
     container_name: eureka-server
+    env_file: ./logistics-envs/eureka-server.env
     volumes:
       - ./infra/eureka-server:/app
       - *entrypoint-spring
     ports: 
       - "8081:8080"
-    <<: *common-spring
     restart: always
-    environment:
-      <<: [*env]
 
+## api 게이트웨이 구성필요
   # api-gateway:
   #   container_name: api-gateway
   #   volumes:
@@ -124,8 +101,8 @@ services:
 ###########################
   db-server:
     container_name: db-server
-    env_file: ./db.env
     image: postgres:16-alpine
+    env_file: ./logistics-envs/db-server.env
     volumes:
       - volume-db:/var/lib/postgresql/data
       - ./infra/db-server/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -133,10 +110,12 @@ services:
         - logistics-network
     restart: always
 
+
 networks:
   logistics-network:
     name: logistics-network
     driver: bridge
+
 
 volumes:
   volume-db:
