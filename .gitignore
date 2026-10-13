@@ -1,1 +1,3 @@
 *.env
+/logistics-envs
+.DS_Store
