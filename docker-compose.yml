@@ -24,7 +24,6 @@ services:
     volumes:
       - ./services/user-service:/app
       - *entrypoint-spring
-    depends_on: [eureka-server, db-server]
     profiles: ["user"]
 
   order-service:
@@ -35,7 +34,6 @@ services:
     volumes:
       - ./services/order-service:/app
       - *entrypoint-spring
-    depends_on: [eureka-server, db-server]
     profiles: ["order"]
 
   delivery-service:
@@ -46,7 +44,6 @@ services:
     volumes:
       - ./services/delivery-service:/app
       - *entrypoint-spring
-    depends_on: [eureka-server, db-server]
     profiles: ["delivery"]
 
   hub-service:
@@ -57,7 +54,6 @@ services:
     volumes:
       - ./services/hub-service:/app
       - *entrypoint-spring
-    depends_on: [eureka-server, db-server]
     profiles: ["hub"]
 
   company-service:
@@ -68,7 +64,6 @@ services:
     volumes:
       - ./services/company-service:/app
       - *entrypoint-spring
-    depends_on: [eureka-server, db-server]
     profiles: ["company"]
 
 
@@ -84,6 +79,7 @@ services:
       - *entrypoint-spring
     # ports: ["8081:8080"]
     restart: always
+    profiles: ["infra"]
 
   gateway-server:
     <<: *common-spring
@@ -93,9 +89,9 @@ services:
       - ./infra/gateway-server:/app
       - *entrypoint-spring
     ports: ["8080:8080"]
-    depends_on: [eureka-server]
     restart: always
-    profiles: ["gateway"]
+    depends_on: [eureka-server]
+    profiles: ["gateway", "infra"]
 
 
 ###########################
@@ -112,6 +108,7 @@ services:
         - logistics-network
     restart: always
     init: true
+    profiles: ["infra"]
 
 
 networks:
