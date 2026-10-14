@@ -31,12 +31,20 @@ spring:
               uri: lb://${DELIVERY_SERVICE_NAME}
               predicates:
                 - Path=${DELIVERY_SERVICE_PATHS}
+    # 로드밸런서의 캐시를 사용하지 않도록 설정
+    # 개발 환경을 위한 설정이므로 프로덕션 환경에서 변경 필요
+    loadbalancer:
+      cache:
+        enabled: false
 
 server:
   port: ${GATEWAY_SERVER_PORT}
 
 eureka:
   client:
+    # 레지스트리를 조회해서 가져오는 시간을 1초로 설정
+    # 빠른 서비스 등록 / 조회를 위해 설정한 것으로 프로덕션 환경에서 변경 필요
+    registry-fetch-interval-seconds: 1
     register-with-eureka: true
     fetch-registry: true
     service-url:
