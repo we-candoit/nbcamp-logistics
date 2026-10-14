@@ -1,6 +1,6 @@
 *.env
 /logistics-envs
 .DS_Store
-makefile
+Makefile
 setting.gradle
 .idea
