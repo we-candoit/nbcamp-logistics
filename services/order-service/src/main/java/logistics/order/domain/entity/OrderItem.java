@@ -11,22 +11,21 @@ import java.util.UUID;
 public class OrderItem extends BaseEntity {
 
     @Id @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(nullable = false, updatable = false)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private UUID itemId;
 
-    @Column(nullable = false, length = 100)
+    @Column(length = 100, nullable = false, updatable = false)
     private String itemName;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private Long price;
 
     @Column(nullable = false)
     private Long quantity;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id")
+    @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 }

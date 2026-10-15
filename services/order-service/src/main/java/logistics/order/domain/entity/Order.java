@@ -13,19 +13,26 @@ public class Order extends BaseEntity {
     @Id @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private UUID orderUserId;
 
-    @Column(nullable = false)
-    private UUID requestCompanyId;
+    @Column(nullable = false, updatable = false)
+    private UUID requesterId;
+
+    @Column(nullable = false, updatable = false)
+    private UUID supplierId;
+
+    @Column(nullable = false, updatable = false)
+    private UUID arrivalHubId;
 
     @Column(nullable = false)
-    private UUID supplyCompanyId;
+    private UUID departureHubId;
 
     @Column(nullable = false)
     private Long quantity;
     private String requestNote;
 
     @Enumerated(EnumType.STRING)
-    private OrderStatus orderStatus;
+    @Column(nullable = false)
+    private OrderStatus orderStatus = OrderStatus.WAITING;
 }
