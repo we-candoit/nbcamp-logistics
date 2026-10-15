@@ -4,6 +4,7 @@ package logistics.order.domain.entity;
 import jakarta.persistence.*;
 import logistics.order.common.entity.BaseEntity;
 import logistics.order.domain.enums.OrderItemStatus;
+import logistics.order.domain.entity.Order;
 
 import java.util.UUID;
 

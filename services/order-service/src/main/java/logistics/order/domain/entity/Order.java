@@ -31,6 +31,7 @@ public class Order extends BaseEntity {
     private OrderStatus orderStatus = OrderStatus.WAITING;
 
 
+    //배송과 N:1 관계시 삭제 필요
     @Column
-    private UUID deliveryId; //배송과 N:1 관계시 삭제 필요
+    private UUID deliveryId;
 }
