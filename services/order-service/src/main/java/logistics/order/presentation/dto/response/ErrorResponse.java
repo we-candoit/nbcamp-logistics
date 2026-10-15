@@ -4,7 +4,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-public final class ErrorDto {
+public final class ErrorResponse {
 
     private final int status;
     private final String message;
