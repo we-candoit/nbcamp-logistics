@@ -20,19 +20,17 @@ public class Order extends BaseEntity {
     private UUID requesterId;
 
     @Column(nullable = false, updatable = false)
-    private UUID supplierId;
-
-    @Column(nullable = false, updatable = false)
-    private UUID arrivalHubId;
-
-    @Column(nullable = false)
     private UUID departureHubId;
 
-    @Column(nullable = false)
-    private Long quantity;
+    @Column(nullable = false, updatable = false)
+    private String address;
     private String requestNote;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private OrderStatus orderStatus = OrderStatus.WAITING;
+
+
+    @Column
+    private UUID deliveryId; //배송과 N:1 관계시 삭제 필요
 }
