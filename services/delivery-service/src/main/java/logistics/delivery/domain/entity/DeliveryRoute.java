@@ -1,0 +1,63 @@
+package logistics.delivery.domain.entity;
+
+import jakarta.persistence.*;
+import logistics.delivery.common.entity.BaseEntity;
+import logistics.delivery.domain.enums.DeliveryRouteStatus;
+import logistics.delivery.domain.enums.RouteType;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+@Entity
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Table(
+        name = "p_delivery_routes",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"delivery_id", "sequence"})
+        }
+)
+public class DeliveryRoute extends BaseEntity {
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "delivery_id", nullable = false)
+    private Delivery delivery;
+
+    @Column(nullable = false)
+    private Integer sequence;
+
+    @Column
+    private UUID managerId;
+
+    @Column(nullable = false)
+    private UUID departureHubId;
+
+    // 도착 허브 id가 null : 허브 -> 업체 배송
+    @Column
+    private UUID destinationHubId;
+
+    // 예상 거리가 null : 허브 -> 업체 배송
+    @Column
+    private BigDecimal expectedDistance;
+
+    // 예상 시간이 null : 허브 -> 업체 배송
+    @Column
+    private Integer expectedDuration;
+
+    @Column
+    private BigDecimal actualDistance;
+
+    @Column
+    private Integer actualDuration;
+
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private DeliveryRouteStatus status = DeliveryRouteStatus.WAITING;
+
+    @Column(nullable = false)
+    private RouteType type;
+
+}
