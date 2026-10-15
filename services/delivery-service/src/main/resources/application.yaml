@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: delivery-service
+  datasource:
+    url: jdbc:postgresql://${DB_SERVER_NAME}:${DB_SERVER_PORT}/${POSTGRES_DB}?currentSchema=${DB_SCHEMA}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+
+server:
+  port: ${DELIVERY_SERVICE_PORT:8080}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${DISCOVERY_SERVER_NAME}:${DISCOVERY_SERVER_PORT}/eureka/

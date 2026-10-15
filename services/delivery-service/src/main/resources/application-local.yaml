@@ -1,0 +1,17 @@
+# IntelliJ / bootRun local development. Enable with --spring.profiles.active=local.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:${DB_LOCAL_PORT:5432}/${POSTGRES_DB}?currentSchema=${DB_SCHEMA}
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+server:
+  port: ${DELIVERY_LOCAL_PORT:8084}
+
+# Call local APIs directly at localhost:8084 during standalone development.
+eureka:
+  client:
+    enabled: false
+    service-url:
+      defaultZone: http://localhost:8081/eureka/
