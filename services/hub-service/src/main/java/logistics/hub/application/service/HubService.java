@@ -1,0 +1,40 @@
+package logistics.hub.application.service;
+
+import logistics.hub.presentation.dto.response.HubResponse;
+import logistics.hub.domain.entity.Hub;
+import logistics.hub.infrastructure.repository.HubRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class HubService {
+
+    private final HubRepository hubRepository;
+
+    public List<HubResponse> getHubs() {
+        List<Hub> hubs =
+                hubRepository.findAllByDeletedAtIsNullOrderByNameAsc();
+
+        return hubs.stream()
+                .map(HubResponse::new)
+                .toList();
+    }
+
+    public HubResponse getHub(UUID hubId) {
+        Hub hub = hubRepository.findByIdAndDeletedAtIsNull(hubId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "해당 허브를 찾을 수 없습니다."
+                ));
+
+        return new HubResponse(hub);
+    }
+}
