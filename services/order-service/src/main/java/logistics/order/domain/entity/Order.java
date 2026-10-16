@@ -27,7 +27,7 @@ public class Order extends BaseEntity {
     private String requestNote;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(length = 30, nullable = false)
     private OrderStatus orderStatus = OrderStatus.WAITING;
 
 
