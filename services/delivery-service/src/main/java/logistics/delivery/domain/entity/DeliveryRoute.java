@@ -40,24 +40,25 @@ public class DeliveryRoute extends BaseEntity {
     private UUID destinationHubId;
 
     // 예상 거리가 null : 허브 -> 업체 배송
-    @Column
+    @Column(columnDefinition = "NUMERIC")
     private BigDecimal expectedDistance;
 
     // 예상 시간이 null : 허브 -> 업체 배송
     @Column
     private Integer expectedDuration;
 
-    @Column
+    @Column(columnDefinition = "NUMERIC")
     private BigDecimal actualDistance;
 
     @Column
     private Integer actualDuration;
 
-    @Column(nullable = false)
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
     private DeliveryRouteStatus status = DeliveryRouteStatus.WAITING;
 
-    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
     private RouteType type;
 
 }
