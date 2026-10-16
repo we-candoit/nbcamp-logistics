@@ -4,11 +4,15 @@ package logistics.order.domain.entity;
 import jakarta.persistence.*;
 import logistics.order.common.entity.BaseEntity;
 import logistics.order.domain.enums.OrderItemStatus;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.util.UUID;
 
-@Entity
+@Entity @Getter @Setter
 @Table(name = "p_order_item")
+@NoArgsConstructor
 public class OrderItem extends BaseEntity {
 
     @Id @GeneratedValue(strategy = GenerationType.UUID)
@@ -38,4 +42,15 @@ public class OrderItem extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
+
+    public OrderItem(OrderItemStatus orderItemStatus, UUID itemId, String itemName, Long price, Long quantity, UUID arrivalHubId, UUID supplierId, Order order) {
+        this.orderItemStatus = orderItemStatus;
+        this.itemId = itemId;
+        this.itemName = itemName;
+        this.price = price;
+        this.quantity = quantity;
+        this.arrivalHubId = arrivalHubId;
+        this.supplierId = supplierId;
+        this.order = order;
+    }
 }

@@ -1,5 +1,6 @@
 package logistics.order.infrastructure;
 
+import logistics.order.common.AuthHeaders;
 import logistics.order.presentation.AuthInterceptor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,6 +10,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -33,14 +35,14 @@ class AuditorAwareImplTest {
     @Test
     public void username이_있는_경우() {
         //given
-        String username = "user1";
-        request.setAttribute(AuthInterceptor.USER_HEADER, username);
+        UUID userId = UUID.randomUUID();
+        request.setAttribute(AuthHeaders.USER_ID, userId);
 
         //when
-        Optional<String> findUsername = auditorAwareImpl.getCurrentAuditor();
+        Optional<UUID> findUserId = auditorAwareImpl.getCurrentAuditor();
 
         //then
-        assertThat(findUsername).contains(username);
+        assertThat(findUserId).contains(userId);
     }
 
     //username이 null인 경우
@@ -49,9 +51,9 @@ class AuditorAwareImplTest {
         //given
 
         //when
-        Optional<String> findUsername = auditorAwareImpl.getCurrentAuditor();
+        Optional<UUID> findUserId = auditorAwareImpl.getCurrentAuditor();
 
         //then
-        assertThat(findUsername).isEmpty();
+        assertThat(findUserId).isEmpty();
     }
 }
