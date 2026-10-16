@@ -64,4 +64,12 @@ public class Delivery extends BaseEntity {
                 && Objects.equals(this.recipientName, recipientName)
                 && Objects.equals(this.recipientPhone, recipientPhone);
     }
+
+    // 배송 취소
+    public void cancel(){
+        if(status == DeliveryStatus.CANCELLED) return;
+        if(status != DeliveryStatus.WAITING) throw new IllegalStateException("출발 전 배송만 취소할 수 있습니다.");
+
+        status = DeliveryStatus.CANCELLED;
+    }
 }

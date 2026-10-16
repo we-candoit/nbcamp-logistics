@@ -2,12 +2,14 @@ package logistics.delivery.application;
 
 import logistics.delivery.domain.entity.Delivery;
 import logistics.delivery.domain.entity.DeliveryRoute;
+import logistics.delivery.domain.enums.DeliveryStatus;
 import logistics.delivery.domain.enums.RouteType;
 import logistics.delivery.infrastructure.client.HubClient;
 import logistics.delivery.infrastructure.client.dto.HubRouteResponse;
 import logistics.delivery.infrastructure.repository.DeliveryRepository;
 import logistics.delivery.infrastructure.repository.DeliveryRouteRepository;
 import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
+import logistics.delivery.presentation.dto.response.DeliveryCancelResponse;
 import logistics.delivery.presentation.dto.response.DeliveryCreateResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -138,5 +140,45 @@ public class DeliveryServiceImpl implements DeliveryService{
 
         routes.add(hubToCompany);
         return routes;
+    }
+
+    /**
+     * 배송을 취소하는 경우 해당 배송과 배송 경로를 함께 취소
+     * 배송이 없는 경우 : 404
+     * 배송이 이미 논리 삭제된 경우 : 404
+     * 배송을 취소할 수 없는 경우 : 409
+     * @param deliveryId
+     * @return 배송 취소 메서드
+     */
+    @Override
+    @Transactional
+    public DeliveryCancelResponse cancelDelivery(UUID deliveryId) {
+        Delivery delivery = deliveryRepository.findById(deliveryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 배송을 찾을 수 없습니다."));
+
+        if(delivery.getDeletedAt() != null){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 배송을 찾을 수 없습니다.");
+        }
+
+        // 이미 취소된 배송에 대해 반복 취소 요청이 오는 경우 기존 결과를 응답
+        if(delivery.getStatus() == DeliveryStatus.CANCELLED){
+            return DeliveryCancelResponse.from(delivery);
+        }
+
+        List<DeliveryRoute> routes = deliveryRouteRepository.findAllByDeliveryIdOrderBySequenceAsc(deliveryId);
+
+        try{
+            delivery.cancel();
+
+            for(DeliveryRoute route : routes){
+                route.cancel();
+            }
+        }
+        // 배송, 배송 경로 상태가 WAITING인 경우/배송이 이미 취소된 경우를 제외한 취소 불가 상태
+        catch (IllegalStateException e){
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        }
+
+        return DeliveryCancelResponse.from(delivery);
     }
 }
