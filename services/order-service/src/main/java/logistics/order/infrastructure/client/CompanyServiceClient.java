@@ -1,8 +1,8 @@
 package logistics.order.infrastructure.client;
 
 import jakarta.ws.rs.QueryParam;
-import logistics.order.infrastructure.dto.FetchCompaniesByIdsResponse;
-import logistics.order.infrastructure.dto.FetchItemsByIdsResponse;
+import logistics.order.infrastructure.client.dto.FetchCompaniesByIdsResponse;
+import logistics.order.infrastructure.client.dto.FetchItemsByIdsResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 

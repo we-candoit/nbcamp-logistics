@@ -1,4 +1,4 @@
-package logistics.order.infrastructure.dto;
+package logistics.order.infrastructure.client.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

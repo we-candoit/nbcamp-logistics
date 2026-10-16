@@ -1,6 +1,6 @@
 package logistics.order.infrastructure.client;
 
-import logistics.order.infrastructure.dto.DecreaseStockRequest;
+import logistics.order.infrastructure.client.dto.DecreaseStockRequest;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
