@@ -73,4 +73,12 @@ public class DeliveryRoute extends BaseEntity {
         this.expectedDuration = expectedDuration;
         this.type = type;
     }
+
+    // 배송 취소 시 배송 경로 취소
+    public void cancel(){
+        if(status == DeliveryRouteStatus.CANCELLED) return;
+        if(status != DeliveryRouteStatus.WAITING) throw new IllegalStateException("출발 전 배송 경로만 취소할 수 있습니다.");
+
+        status = DeliveryRouteStatus.CANCELLED;
+    }
 }
