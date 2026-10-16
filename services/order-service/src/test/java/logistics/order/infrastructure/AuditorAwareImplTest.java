@@ -1,5 +1,6 @@
 package logistics.order.infrastructure;
 
+import logistics.order.common.AuthHeaders;
 import logistics.order.presentation.AuthInterceptor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +36,7 @@ class AuditorAwareImplTest {
     public void username이_있는_경우() {
         //given
         UUID userId = UUID.randomUUID();
-        request.setAttribute(AuthInterceptor.USER_HEADER, userId);
+        request.setAttribute(AuthHeaders.USER_ID, userId);
 
         //when
         Optional<UUID> findUserId = auditorAwareImpl.getCurrentAuditor();
