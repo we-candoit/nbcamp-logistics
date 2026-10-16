@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import logistics.delivery.common.entity.BaseEntity;
 import logistics.delivery.domain.enums.DeliveryStatus;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -40,4 +41,15 @@ public class Delivery extends BaseEntity {
 
     @Column(nullable = false, length = 20)
     private String recipientPhone;
+
+    @Builder
+    private Delivery(UUID orderId, UUID departureHubId, UUID destinationHubId,
+                    String address, String recipientName, String recipientPhone) {
+        this.orderId = orderId;
+        this.departureHubId = departureHubId;
+        this.destinationHubId = destinationHubId;
+        this.address = address;
+        this.recipientName = recipientName;
+        this.recipientPhone = recipientPhone;
+    }
 }

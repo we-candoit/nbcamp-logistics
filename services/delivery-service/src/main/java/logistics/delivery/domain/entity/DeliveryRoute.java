@@ -5,6 +5,7 @@ import logistics.delivery.common.entity.BaseEntity;
 import logistics.delivery.domain.enums.DeliveryRouteStatus;
 import logistics.delivery.domain.enums.RouteType;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -61,4 +62,15 @@ public class DeliveryRoute extends BaseEntity {
     @Column(nullable = false, length = 30)
     private RouteType type;
 
+    @Builder
+    public DeliveryRoute(Delivery delivery, Integer sequence, UUID departureHubId, UUID destinationHubId,
+                         BigDecimal expectedDistance, Integer expectedDuration, RouteType type) {
+        this.delivery = delivery;
+        this.sequence = sequence;
+        this.departureHubId = departureHubId;
+        this.destinationHubId = destinationHubId;
+        this.expectedDistance = expectedDistance;
+        this.expectedDuration = expectedDuration;
+        this.type = type;
+    }
 }
