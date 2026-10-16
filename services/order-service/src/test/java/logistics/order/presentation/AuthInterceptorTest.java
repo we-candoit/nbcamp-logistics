@@ -1,5 +1,6 @@
 package logistics.order.presentation;
 
+import logistics.order.common.AuthHeaders;
 import logistics.order.presentation.exception.CustomException;
 import logistics.order.presentation.exception.ErrorCode;
 import org.assertj.core.api.Assertions;
@@ -27,13 +28,13 @@ class AuthInterceptorTest {
         //given
         String username = "user1";
         String role = "master";
-        request.addHeader(AuthInterceptor.USER_HEADER, username);
-        request.addHeader(AuthInterceptor.ROLE_HEADER, role);
+        request.addHeader(AuthHeaders.USER_ID, username);
+        request.addHeader(AuthHeaders.ROLE, role);
 
         //when
         boolean result = authInterceptor.preHandle(request, response, object);
-        Object findUsername = request.getAttribute(AuthInterceptor.USER_HEADER);
-        Object findRole = request.getAttribute(AuthInterceptor.ROLE_HEADER);
+        Object findUsername = request.getAttribute(AuthHeaders.USER_ID);
+        Object findRole = request.getAttribute(AuthHeaders.ROLE);
 
         //then
         Assertions.assertThat(findUsername instanceof String).isTrue();
@@ -47,15 +48,15 @@ class AuthInterceptorTest {
     public void Role헤더만_있는경우() throws Exception {
         //given
         String role = "master";
-        request.addHeader(AuthInterceptor.ROLE_HEADER, role);
+        request.addHeader(AuthHeaders.ROLE, role);
 
         //when
         try {
             authInterceptor.preHandle(request, response, object);
 
         } catch (Exception e) {
-            Object findUsername = request.getAttribute(AuthInterceptor.USER_HEADER);
-            Object findRole = request.getAttribute(AuthInterceptor.ROLE_HEADER);
+            Object findUsername = request.getAttribute(AuthHeaders.USER_ID);
+            Object findRole = request.getAttribute(AuthHeaders.ROLE);
 
             //then
             Assertions.assertThat(findUsername).isNull();
@@ -70,15 +71,15 @@ class AuthInterceptorTest {
     public void User헤더만_있는경우() throws Exception {
         //given
         String username = "master";
-        request.addHeader(AuthInterceptor.USER_HEADER, username);
+        request.addHeader(AuthHeaders.USER_ID, username);
 
         //when
         try {
             authInterceptor.preHandle(request, response, object);
 
         } catch (Exception e) {
-            Object findUsername = request.getAttribute(AuthInterceptor.USER_HEADER);
-            Object findRole = request.getAttribute(AuthInterceptor.ROLE_HEADER);
+            Object findUsername = request.getAttribute(AuthHeaders.USER_ID);
+            Object findRole = request.getAttribute(AuthHeaders.ROLE);
 
             //then
             Assertions.assertThat(findUsername).isNull();
@@ -98,8 +99,8 @@ class AuthInterceptorTest {
             authInterceptor.preHandle(request, response, object);
 
         } catch (Exception e) {
-            Object findUsername = request.getAttribute(AuthInterceptor.USER_HEADER);
-            Object findRole = request.getAttribute(AuthInterceptor.ROLE_HEADER);
+            Object findUsername = request.getAttribute(AuthHeaders.USER_ID);
+            Object findRole = request.getAttribute(AuthHeaders.ROLE);
 
             //then
             Assertions.assertThat(findUsername).isNull();

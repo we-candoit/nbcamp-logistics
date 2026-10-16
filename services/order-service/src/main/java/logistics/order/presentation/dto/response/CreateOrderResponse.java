@@ -1,0 +1,15 @@
+package logistics.order.presentation.dto.response;
+
+import lombok.*;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Data
+public class CreateOrderResponse {
+
+    private UUID orderId;
+    private UUID deliveryId;
+    private LocalDateTime createdAt;
+
+}
