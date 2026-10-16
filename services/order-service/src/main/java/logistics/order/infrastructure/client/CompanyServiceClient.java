@@ -1,16 +1,17 @@
 package logistics.order.infrastructure.client;
 
-import logistics.order.infrastructure.dto.GetCompanyResponse;
+import jakarta.ws.rs.QueryParam;
+import logistics.order.infrastructure.dto.FetchCompaniesByIdsResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 
+import java.util.List;
 import java.util.UUID;
 
 @FeignClient(name = "${COMPANY_SERVICE_NAME}")
 public interface CompanyServiceClient {
 
-    @GetMapping("/api/companies/{companyId}")
-    GetCompanyResponse getCompany(@PathVariable("companyId") UUID companyId);
+@GetMapping("/api/companies")
+FetchCompaniesByIdsResponse fetchCompaniesByIds(@QueryParam("ids") List<UUID> companyIds);
 
 }
