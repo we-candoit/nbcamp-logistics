@@ -24,7 +24,7 @@ public class Order extends BaseEntity {
     private UUID requesterId;
 
     @Column(nullable = false, updatable = false)
-    private UUID departureHubId;
+    private UUID destinationHubId;
 
     @Column(nullable = false, updatable = false)
     private String address;
@@ -39,10 +39,10 @@ public class Order extends BaseEntity {
     @Column
     private UUID deliveryId;
 
-    public Order(UUID orderUserId, UUID requesterId, UUID departureHubId, String address, String requestNote) {
+    public Order(UUID orderUserId, UUID requesterId, UUID destinationHubId, String address, String requestNote) {
         this.orderUserId = orderUserId;
         this.requesterId = requesterId;
-        this.departureHubId = departureHubId;
+        this.destinationHubId = destinationHubId;
         this.address = address;
         this.requestNote = requestNote;
     }

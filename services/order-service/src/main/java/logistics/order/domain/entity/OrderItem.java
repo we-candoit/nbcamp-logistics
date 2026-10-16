@@ -19,7 +19,7 @@ public class OrderItem extends BaseEntity {
     private UUID id;
 
     @Column(length = 30, nullable = false)
-    private OrderItemStatus orderItemStatus = OrderItemStatus.WAITING;
+    private OrderItemStatus orderItemStatus = OrderItemStatus.ORDERED;
 
     @Column(nullable = false, updatable = false)
     private UUID itemId;
@@ -34,7 +34,7 @@ public class OrderItem extends BaseEntity {
     private Long quantity;
     
     @Column(nullable = false, updatable = false)
-    private UUID arrivalHubId;
+    private UUID departureHubId;
     
     @Column(nullable = false, updatable = false)
     private UUID supplierId;
@@ -43,13 +43,13 @@ public class OrderItem extends BaseEntity {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
-    public OrderItem(OrderItemStatus orderItemStatus, UUID itemId, String itemName, Long price, Long quantity, UUID arrivalHubId, UUID supplierId, Order order) {
+    public OrderItem(OrderItemStatus orderItemStatus, UUID itemId, String itemName, Long price, Long quantity, UUID departureHubId, UUID supplierId, Order order) {
         this.orderItemStatus = orderItemStatus;
         this.itemId = itemId;
         this.itemName = itemName;
         this.price = price;
         this.quantity = quantity;
-        this.arrivalHubId = arrivalHubId;
+        this.departureHubId = departureHubId;
         this.supplierId = supplierId;
         this.order = order;
     }
