@@ -18,8 +18,8 @@ public class OrderItem extends BaseEntity {
     @Id @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
-    private OrderItemStatus orderItemStatus = OrderItemStatus.ORDERED;
+    @Column(length = 30, nullable = false)
+    private OrderItemStatus orderItemStatus = OrderItemStatus.WAITING;
 
     @Column(nullable = false, updatable = false)
     private UUID itemId;
