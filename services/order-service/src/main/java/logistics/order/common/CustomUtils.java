@@ -1,26 +1,24 @@
 package logistics.order.common;
 
-import logistics.order.presentation.AuthInterceptor;
-import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.RequestScope;
 
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.springframework.web.context.request.RequestAttributes.SCOPE_REQUEST;
+import static logistics.order.presentation.AuthInterceptor.*;
+import static org.springframework.web.context.request.RequestAttributes.*;
 
 public class CustomUtils {
 
     public static Optional<UUID> getUserId() {
         //등록된 username 가져오기
-        Object username = RequestContextHolder
+        Object userId = RequestContextHolder
                 .currentRequestAttributes()
-                .getAttribute(AuthInterceptor.USER_HEADER, RequestAttributes.SCOPE_REQUEST);
+                .getAttribute(USER_HEADER, SCOPE_REQUEST);
 
         //UUID인 경우 캐스팅
-        if (username instanceof UUID) {
-            return Optional.of(UUID.fromString(username.toString()));
+        if (userId instanceof UUID) {
+            return Optional.of((UUID) userId);
         }
 
         return Optional.empty();
