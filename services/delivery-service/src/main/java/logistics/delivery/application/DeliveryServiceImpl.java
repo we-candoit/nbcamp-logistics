@@ -12,11 +12,13 @@ import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
 import logistics.delivery.presentation.dto.response.DeliveryCancelResponse;
 import logistics.delivery.presentation.dto.response.DeliveryCreateResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.AuditorAware;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -29,8 +31,10 @@ public class DeliveryServiceImpl implements DeliveryService{
     private final DeliveryRepository deliveryRepository;
     private final DeliveryRouteRepository deliveryRouteRepository;
     private final HubClient hubClient;
+    private final AuditorAware<String> auditorAware;
 
     /**
+     * 배송 생성
      * 주문 서비스에게 배송 생성을 요청 받아 배송과 배송 경로를 생성하는 메서드
      * @param request 배송 생성 요청
      * @return 배송 생성 응답
@@ -143,12 +147,13 @@ public class DeliveryServiceImpl implements DeliveryService{
     }
 
     /**
+     * 배송 취소
      * 배송을 취소하는 경우 해당 배송과 배송 경로를 함께 취소
      * 배송이 없는 경우 : 404
      * 배송이 이미 논리 삭제된 경우 : 404
      * 배송을 취소할 수 없는 경우 : 409
      * @param deliveryId
-     * @return 배송 취소 메서드
+     * @return 배송 취소 응답
      */
     @Override
     @Transactional
@@ -180,5 +185,40 @@ public class DeliveryServiceImpl implements DeliveryService{
         }
 
         return DeliveryCancelResponse.from(delivery);
+    }
+
+    /**
+     * 배송 삭제
+     * 배송을 삭제하는 경우 이미 취소된 배송에 한해 배송과 배송 경로를 삭제
+     * @param deliveryId
+     */
+    @Override
+    @Transactional
+    public void deleteDelivery(UUID deliveryId) {
+        Delivery delivery = deliveryRepository.findById(deliveryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 배송을 찾을 수 없습니다."));
+
+        if(delivery.getDeletedAt() != null) return;
+
+        // 배송 상태가 삭제 가능한지 검증
+        try{
+            delivery.validateDeletable();
+        } catch (IllegalStateException e){
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        }
+
+        String username = auditorAware.getCurrentAuditor()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "삭제 요청자 정보를 확인할 수 없습니다."));
+
+        List<DeliveryRoute> routes = deliveryRouteRepository.findAllByDeliveryIdOrderBySequenceAsc(deliveryId);
+
+        LocalDateTime deletedAt = LocalDateTime.now();
+
+        delivery.delete(username, deletedAt);
+
+        for(DeliveryRoute route : routes){
+            route.delete(username, deletedAt);
+        }
+
     }
 }

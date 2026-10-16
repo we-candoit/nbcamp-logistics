@@ -45,4 +45,11 @@ public abstract class BaseEntity {
     @Column(length = 100)
     private String deletedBy;
 
+    public void delete(String username, LocalDateTime deletedAt){
+        if(this.deletedAt != null) return;
+
+        this.deletedBy = username;
+        this.deletedAt = deletedAt;
+    }
+
 }
