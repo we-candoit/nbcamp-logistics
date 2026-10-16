@@ -8,4 +8,5 @@ import java.util.UUID;
 public interface DeliveryService {
     DeliveryCreateResult createDelivery(DeliveryCreateRequest request);
     DeliveryCancelResponse cancelDelivery(UUID deliveryId);
+    void deleteDelivery(UUID deliveryId);
 }

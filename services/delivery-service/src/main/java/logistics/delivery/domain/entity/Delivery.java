@@ -72,4 +72,12 @@ public class Delivery extends BaseEntity {
 
         status = DeliveryStatus.CANCELLED;
     }
+
+    // 배송 삭제를 위해 취소된 배송인지 검증
+    public void validateDeletable(){
+        if(getDeletedAt() != null) return ;
+        if(status != DeliveryStatus.CANCELLED){
+            throw new IllegalStateException("취소된 배송만 삭제할 수 있습니다.");
+        }
+    }
 }

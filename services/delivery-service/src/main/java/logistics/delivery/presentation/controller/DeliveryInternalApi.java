@@ -8,6 +8,7 @@ import logistics.delivery.presentation.dto.response.DeliveryCreateResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,5 +37,12 @@ public class DeliveryInternalApi implements DeliveryApiSpec{
     public ResponseEntity<DeliveryCancelResponse> cancelDelivery(UUID deliveryId) {
         DeliveryCancelResponse respone = deliveryService.cancelDelivery(deliveryId);
         return ResponseEntity.ok(respone);
+    }
+
+    @Override
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteDelivery(UUID deliveryId) {
+        deliveryService.deleteDelivery(deliveryId);
+        return ResponseEntity.noContent().build();
     }
 }
