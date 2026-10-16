@@ -1,5 +1,6 @@
 package logistics.delivery.presentation.controller;
 
+import logistics.delivery.application.DeliveryCreateResult;
 import logistics.delivery.application.DeliveryService;
 import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
 import logistics.delivery.presentation.dto.response.DeliveryCreateResponse;
@@ -20,7 +21,10 @@ public class DeliveryInternalApi implements DeliveryApiSpec{
     @Override
     @PostMapping
     public ResponseEntity<DeliveryCreateResponse> createDelivery(DeliveryCreateRequest request) {
-        DeliveryCreateResponse response = deliveryService.createDelivery(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        DeliveryCreateResult result = deliveryService.createDelivery(request);
+
+        // 신규 배송인 경우 201, 기존 배송인 경우 200
+        HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(result.response());
     }
 }

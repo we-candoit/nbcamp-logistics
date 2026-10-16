@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.Objects;
 import java.util.UUID;
 
 @Entity
@@ -51,5 +52,16 @@ public class Delivery extends BaseEntity {
         this.address = address;
         this.recipientName = recipientName;
         this.recipientPhone = recipientPhone;
+    }
+
+    // 기존 배송과 재요청의 내용이 같은지 비교
+    public boolean matchesCreation(UUID departureHubId, UUID destinationHubId,
+                                   String address, String recipientName, String recipientPhone
+    ) {
+        return Objects.equals(this.departureHubId, departureHubId)
+                && Objects.equals(this.destinationHubId, destinationHubId)
+                && Objects.equals(this.address, address)
+                && Objects.equals(this.recipientName, recipientName)
+                && Objects.equals(this.recipientPhone, recipientPhone);
     }
 }
