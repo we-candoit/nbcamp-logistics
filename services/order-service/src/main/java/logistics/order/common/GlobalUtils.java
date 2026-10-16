@@ -22,6 +22,7 @@ public class GlobalUtils {
 
         return Optional.empty();
     }
+
     public static Optional<String> getUserRole() {
         //등록된 username 가져오기
         Object role = RequestContextHolder
