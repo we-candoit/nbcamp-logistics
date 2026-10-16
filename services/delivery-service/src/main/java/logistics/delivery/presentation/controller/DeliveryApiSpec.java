@@ -23,7 +23,7 @@ public interface DeliveryApiSpec {
     @Operation(
             summary = "배송 생성",
             description = """
-                    주문 서비스가 호출하는 내부 API로
+                    주문 서비스가 호출하는 내부 API로,
                     배송과 배송 경로를 함께 생성합니다
 
                     같은 허브: 허브 → 업체 1구간
@@ -122,8 +122,45 @@ public interface DeliveryApiSpec {
             @PathVariable("id") UUID deliveryId
     );
 
-
-
-
+    @Operation(
+            summary = "배송 삭제",
+            description = """
+                주문 서비스가 호출하는 내부 API로,
+                취소된 배송과 소속 경로에 삭제 시간과 삭제 요청자를 기록합니다.
+                실제 DB 데이터를 삭제하지 않는 Soft Delete입니다.
+                이미 삭제된 배송은 최초 삭제 기록을 유지합니다.
+                """
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "논리 삭제 성공 또는 이미 삭제된 배송",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 배송 ID 형식",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "사용자 또는 역할 헤더 누락, 공백",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "배송이 존재하지 않음",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "취소되지 않은 배송은 삭제 불가",
+                    content = @Content
+            )
+    })
+    ResponseEntity<Void> deleteDelivery(
+            @Parameter(description = "삭제할 배송 ID", required = true)
+            @PathVariable("id") UUID deliveryId
+    );
 
 }
