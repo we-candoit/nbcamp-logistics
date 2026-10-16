@@ -42,4 +42,9 @@ public abstract class BaseEntity  {
 
     @Column(length = 100)
     private String deletedBy;           // 레코드 삭제자
+
+    public void delete(String deletedBy) {      // 논리 삭제
+        this.deletedAt = LocalDateTime.now();
+        this.deletedBy = deletedBy;
+    }
 }
