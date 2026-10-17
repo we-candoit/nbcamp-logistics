@@ -10,6 +10,7 @@ import java.util.UUID;
 public class CreateOrderResponse {
 
     private UUID orderId;
+    private UUID itemId;
     private UUID deliveryId;
     private LocalDateTime createdAt;
 
