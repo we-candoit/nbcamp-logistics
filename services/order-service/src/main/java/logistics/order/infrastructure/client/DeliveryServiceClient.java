@@ -19,7 +19,6 @@ public interface DeliveryServiceClient {
     @PostMapping("/internal/deliveries/{id}/cancel")
     CancelDeliveryResponse cancelDelivery(@PathVariable("id") UUID deliveryId);
 
-
     @DeleteMapping("/internal/deliveries/{id}")
     String deleteDelivery(@PathVariable("id")UUID deliveryId);
 

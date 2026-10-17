@@ -19,7 +19,7 @@ public class FetchCompaniesByIdsResponse {
 
         private UUID companyId;
         private UUID hubId;
-        private UUID managerUserID;
+        private UUID managerUserId;
         private String name;
         private String address;
 

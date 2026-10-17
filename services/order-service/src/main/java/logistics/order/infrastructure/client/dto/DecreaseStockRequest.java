@@ -23,7 +23,7 @@ public class DecreaseStockRequest {
     @Data
     @AllArgsConstructor @NoArgsConstructor
     public static class Item {
-        private UUID itemID;
+        private UUID itemId;
         private Long quantity;
     }
 }
