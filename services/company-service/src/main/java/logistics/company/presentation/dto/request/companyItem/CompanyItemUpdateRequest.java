@@ -3,11 +3,12 @@ package logistics.company.presentation.dto.request.companyItem;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompanyItemUpdateRequest {
 
     @Pattern(regexp = ".*\\S.*", message = "상품명은 공백만 입력할 수 없습니다.")
