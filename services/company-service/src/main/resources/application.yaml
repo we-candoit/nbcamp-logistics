@@ -6,9 +6,19 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
   jpa:
+    hibernate:
+      ddl-auto: update                # 엔티티 기준으로 테이블 생성·변경 (개발용)
     properties:
       hibernate:
         default_schema: ${DB_SCHEMA}
+  web:
+    error:
+      include-message: always         # 응답에 에러 메시지 포함
+      include-binding-errors: always  # @Valid 실패 시 필드별 오류 포함
+  data:
+    web:
+      pageable:
+        max-page-size: 50
 
 server:
   port: ${DISCOVERY_SERVER_PORT}
