@@ -81,5 +81,6 @@ public class HubRouteDataInitializer implements CommandLineRunner {
 
         log.info("허브 직선 경로: {}개 추가 (총 {}개 예상)",
                 insertedCount, hubs.size() * (hubs.size() - 1));
+
     }
 }
