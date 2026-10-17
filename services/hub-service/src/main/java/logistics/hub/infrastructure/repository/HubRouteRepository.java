@@ -23,4 +23,8 @@ public interface HubRouteRepository
             UUID destinationHubId
     );
 
+    Optional<HubRoute> findByOriginHub_IdAndDestinationHub_IdAndDeletedAtIsNull(
+            UUID originHubId,
+            UUID destinationHubId
+    );
 }
