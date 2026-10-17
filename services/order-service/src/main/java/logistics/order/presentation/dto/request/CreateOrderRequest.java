@@ -23,6 +23,14 @@ public class CreateOrderRequest {
     @Size(max = 100, message = "주문 당 상품수는 100개 이하이어야 합니다.")
     private List<@NotNull(message = "주문상품 정보는 필수입니다.") @Valid Item> items;
 
+    @NotBlank(message = "수령인 이름은 필수 입니다.")
+    @Size(max = 50, message = "수령인 이름은 1자 이상 50자 이하입니다.")
+    private String recipientName;
+
+    @NotBlank(message = "수령인 전화번호는 필수 입니다.")
+    @Size(max = 20, message = "수령인 전화번호는 1자 이상 20자 이하입니다.")
+    private String recipientPhone;
+
 
     @Getter
     @NoArgsConstructor @AllArgsConstructor
