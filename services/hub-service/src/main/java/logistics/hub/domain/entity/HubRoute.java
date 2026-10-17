@@ -77,4 +77,5 @@ public class HubRoute extends BaseEntity {
         this.distance = distance;
         this.duration = duration;
     }
+
 }

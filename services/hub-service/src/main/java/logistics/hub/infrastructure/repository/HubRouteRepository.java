@@ -18,4 +18,5 @@ public interface HubRouteRepository
             UUID originHubId,
             UUID destinationHubId
     );
+
 }
