@@ -14,11 +14,14 @@ import java.util.UUID;
 @NoArgsConstructor
 public class Order extends BaseEntity {
 
-    @Id @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @Id
+    private UUID id = UUID.randomUUID();
 
     @Column(nullable = false, updatable = false)
     private UUID orderUserId;
+
+    @Column(nullable = false, updatable = false)
+    private UUID deliveryId;
 
     @Column(nullable = false, updatable = false)
     private UUID requesterId;
@@ -35,15 +38,16 @@ public class Order extends BaseEntity {
     private OrderStatus orderStatus = OrderStatus.WAITING;
 
 
-    //배송과 N:1 관계시 삭제 필요
-    @Column
-    private UUID deliveryId;
-
     public Order(UUID orderUserId, UUID requesterId, UUID destinationHubId, String address, String requestNote) {
         this.orderUserId = orderUserId;
         this.requesterId = requesterId;
         this.destinationHubId = destinationHubId;
         this.address = address;
         this.requestNote = requestNote;
+    }
+
+    public void confirm(UUID deliveryId) {
+        this.deliveryId = deliveryId;
+        this.orderStatus = OrderStatus.CONFIRMED;
     }
 }
