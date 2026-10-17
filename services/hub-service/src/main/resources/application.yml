@@ -1,3 +1,7 @@
+app:
+  seed:
+    haversine-routes: true
+
 spring:
   application:
     name: hub-service
