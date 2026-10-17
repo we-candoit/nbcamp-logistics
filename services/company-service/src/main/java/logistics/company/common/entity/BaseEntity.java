@@ -3,9 +3,7 @@ package logistics.company.common.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
-import jakarta.persistence.TemporalType;
 import lombok.Getter;
-import org.hibernate.annotations.Temporal;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
@@ -20,22 +18,21 @@ import java.time.LocalDateTime;
 public abstract class BaseEntity  {
 
     @CreatedDate
-    @Column(updatable = false)
+    @Column(updatable = false, nullable = false)
     private LocalDateTime createdAt;    // 레코드 생성 시간
 
     @CreatedBy
-    @Column(updatable = false)
-    private LocalDateTime createdBy;    // 레코드 생성자
+    @Column(length = 100, updatable = false, nullable = false)
+    private String createdBy;    // 레코드 생성자
 
 
     @LastModifiedDate
     @Column(nullable = false)
-
     private LocalDateTime updatedAt;    // 레코드 수정 시간
 
     @LastModifiedBy
     @Column(length = 100, nullable = false)
-    private LocalDateTime updatedBy;    // 레코드 수정자
+    private String updatedBy;    // 레코드 수정자
 
     @Column
     private LocalDateTime deletedAt;    // 레코드 삭제 시간

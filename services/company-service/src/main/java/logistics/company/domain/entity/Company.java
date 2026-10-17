@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 import java.util.UUID;
 
 @Entity
-@Table(name = "p_company")
+@Table(name = "p_companies")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Company extends BaseEntity {

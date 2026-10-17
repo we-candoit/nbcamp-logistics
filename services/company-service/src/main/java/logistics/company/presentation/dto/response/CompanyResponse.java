@@ -21,7 +21,7 @@ public class CompanyResponse {
     private LocalDateTime createdAt;            // 생성 시각
     private LocalDateTime updatedAt;            // 수정 시각
 
-    public static CompanyResponse of(Company company) {
+    public static CompanyResponse from(Company company) {
         return new CompanyResponse(
                 company.getId(),
                 company.getHubId(),
