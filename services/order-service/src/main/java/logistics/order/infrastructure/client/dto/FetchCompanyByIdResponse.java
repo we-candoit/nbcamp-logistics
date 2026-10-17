@@ -9,8 +9,7 @@ import java.util.UUID;
 
 @Getter
 @NoArgsConstructor @AllArgsConstructor
-public class FetchCompaniesByIdResponse {
-
+public class FetchCompanyByIdResponse {
 
     private UUID companyId;
     private UUID hubId;
