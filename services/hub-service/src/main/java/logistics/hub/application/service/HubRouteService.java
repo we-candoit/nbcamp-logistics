@@ -38,4 +38,21 @@ public class HubRouteService {
 
         return new HubRouteResponse(route);
     }
+
+    public HubRouteResponse getRouteByHubs(
+            UUID originHubId,
+            UUID destinationHubId
+    ) {
+        HubRoute route = hubRouteRepository
+                .findByOriginHub_IdAndDestinationHub_IdAndDeletedAtIsNull(
+                        originHubId,
+                        destinationHubId
+                )
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "해당 허브 이동경로를 찾을 수 없습니다."
+                ));
+
+        return new HubRouteResponse(route);
+    }
 }
