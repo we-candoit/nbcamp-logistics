@@ -2,13 +2,14 @@ package logistics.company.presentation.dto.request.company;
 
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.util.UUID;
 
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompanyUpdateRequest {
 
     private UUID hubId;                         // 소속 허브 id (MASTER만 변경 가능)

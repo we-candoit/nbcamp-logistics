@@ -1,7 +1,12 @@
 package logistics.company.presentation.dto.request.companyItem;
 
 import jakarta.validation.constraints.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompanyItemCreateRequest {
 
     @NotBlank(message = "상품명은 필수입니다.")
