@@ -6,6 +6,8 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
   jpa:
+    hibernate:
+      ddl-auto: update                # 엔티티 기준으로 테이블 생성·변경 (개발용)
     properties:
       hibernate:
         default_schema: ${DB_SCHEMA}
