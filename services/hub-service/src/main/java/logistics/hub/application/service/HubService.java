@@ -1,8 +1,8 @@
 package logistics.hub.application.service;
 
-import logistics.hub.presentation.dto.response.HubResponse;
 import logistics.hub.domain.entity.Hub;
 import logistics.hub.infrastructure.repository.HubRepository;
+import logistics.hub.presentation.dto.response.HubResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -20,8 +20,7 @@ public class HubService {
     private final HubRepository hubRepository;
 
     public List<HubResponse> getHubs() {
-        List<Hub> hubs =
-                hubRepository.findAllByDeletedAtIsNullOrderByNameAsc();
+        List<Hub> hubs = hubRepository.findAllByDeletedAtIsNullOrderByNameAsc();
 
         return hubs.stream()
                 .map(HubResponse::new)

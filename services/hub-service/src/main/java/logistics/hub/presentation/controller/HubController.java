@@ -18,15 +18,15 @@ public class HubController {
 
     private final HubService hubService;
 
+    // 허브 목록 조회
     @GetMapping
     public List<HubResponse> getHubs() {
         return hubService.getHubs();
     }
 
+    // 허브 상세 조회
     @GetMapping("/{hubId}")
-    public HubResponse getHub(
-            @PathVariable("hubId") UUID hubId
-    ) {
+    public HubResponse getHub(@PathVariable("hubId") UUID hubId) {
         return hubService.getHub(hubId);
     }
 }
