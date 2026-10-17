@@ -30,11 +30,27 @@ public class Hub extends BaseEntity {
     @Column(name = "address", nullable = false, length = 255)
     private String address;
 
-    public Hub(String name, String address, String createdBy) {
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
+
+
+    public Hub(
+            String name,
+            String address,
+            double latitude,
+            double longitude,
+            String createdBy
+    ) {
         super(createdBy);
 
         this.name = name;
         this.address = address;
+        this.latitude = latitude;
+        this.longitude = longitude;
     }
 
     public void update(String name, String address) {
