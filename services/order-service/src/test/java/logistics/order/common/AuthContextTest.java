@@ -276,4 +276,53 @@ class AuthContextTest {
             }
         }
     }
+
+    @Nested
+    @DisplayName("isMaster()")
+    class IsMaster {
+
+        @Nested
+        @DisplayName("정상 케이스")
+        class Success {
+
+            @Test
+            public void role이_MASTER면_true를_반환한다() {
+                //given
+                request.setAttribute(AuthHeaders.ROLE, AuthContext.MASTER_ROLE);
+
+                //when, then
+                assertThat(AuthContext.isMaster()).isTrue();
+            }
+
+            @Test
+            public void role이_MASTER가_아니면_false를_반환한다() {
+                //given
+                request.setAttribute(AuthHeaders.ROLE, "COMPANY_MANAGER");
+
+                //when, then
+                assertThat(AuthContext.isMaster()).isFalse();
+            }
+
+            @Test
+            public void 소문자_master는_MASTER로_인정하지_않는다() {
+                //given
+                request.setAttribute(AuthHeaders.ROLE, "master");
+
+                //when, then
+                assertThat(AuthContext.isMaster()).isFalse();
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스")
+        class Failure {
+
+            @Test
+            public void role이_없으면_C500_예외가_발생한다() {
+                //when, then
+                assertThatThrownBy(AuthContext::isMaster)
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C500_INTERNAL_SERVER_ERROR));
+            }
+        }
+    }
 }
