@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.UUID;
 
@@ -153,7 +154,8 @@ class OrderTest {
             public void WAITING이_아닌_주문을_확정하면_C409_예외가_발생하고_상태는_그대로다(OrderStatus status) {
                 //given
                 Order order = createOrder();
-                order.setOrderStatus(status);
+                //상태 변경 메서드(cancel 등)가 아직 없어 테스트에서만 필드를 직접 세팅
+                ReflectionTestUtils.setField(order, "orderStatus", status);
 
                 //when, then
                 assertThatThrownBy(() -> order.confirm(UUID.randomUUID()))
