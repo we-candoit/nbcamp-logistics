@@ -15,6 +15,7 @@ import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
 import logistics.delivery.presentation.dto.response.DeliveryCancelResponse;
 import logistics.delivery.presentation.dto.response.DeliveryCreateResponse;
 import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
+import logistics.delivery.presentation.dto.response.DeliveryRouteResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.http.HttpStatus;
@@ -48,6 +49,21 @@ public class DeliveryServiceImpl implements DeliveryService{
     @Override
     public DeliveryDetailResponse getDeliveryDetail(UUID deliveryId, UUID userId, String username, String role) {
 
+        Delivery delivery = getAccessibleDelivery(deliveryId, userId, username, role);
+
+        return DeliveryDetailResponse.from(delivery);
+    }
+
+    /**
+     * 배송을 조회하고 요청자의 조회 권한을 검증하는 private 메서드
+     * 배송 상세 조회, 배송 경로 조회에서 공통으로 사용
+     * @param deliveryId 조회할 배송
+     * @param userId 배송 담당자, 주문자(요청 업체)와 비교할 요청자 ID
+     * @param role MASTER의 전체 조회 권한 확인
+     * @return
+     */
+    private Delivery getAccessibleDelivery(UUID deliveryId, UUID userId, String username, String role) {
+
         // 조회 권한 검증
         if(!"MASTER".equals(role) && !"USER".equals(role)){
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "허용되지 않은 권한입니다.");
@@ -58,7 +74,7 @@ public class DeliveryServiceImpl implements DeliveryService{
 
         // MASTER, 배송 또는 배송 경로 담당자는 바로 조회 허용
         if("MASTER".equals(role) || isDeliveryManager(delivery, userId)){
-            return DeliveryDetailResponse.from(delivery);
+            return delivery;
         }
 
         // 나머지 사용자는 해당 배송의 주문자인지 확인
@@ -91,7 +107,7 @@ public class DeliveryServiceImpl implements DeliveryService{
             );
         }
 
-        return DeliveryDetailResponse.from(delivery);
+        return delivery;
     }
 
     /**
@@ -101,10 +117,27 @@ public class DeliveryServiceImpl implements DeliveryService{
      * @return 배송 담당 여부
      */
     private boolean isDeliveryManager(Delivery delivery, UUID userId){
+
         if(userId.equals(delivery.getManagerId())) return true;
 
         return deliveryRouteRepository
                 .existsByDeliveryIdAndManagerIdAndDeletedAtIsNull(delivery.getId(), userId);
+    }
+
+    /**
+     * 배송 경로 조회
+     * @param deliveryId 조회할 배송
+     * @param userId 배송 담당자, 주문자(요청 업체)와 비교할 요청자 ID
+     * @param role MASTER의 전체 조회 권한 확인
+     * @return
+     */
+    @Override
+    public List<DeliveryRouteResponse> getDeliveryRoutes(UUID deliveryId, UUID userId, String username, String role) {
+        Delivery delivery = getAccessibleDelivery(deliveryId, userId, username, role);
+        return deliveryRouteRepository.findAllByDeliveryIdAndDeletedAtIsNullOrderBySequenceAsc(delivery.getId())
+                .stream()
+                .map(DeliveryRouteResponse::from)
+                .toList();
     }
 
     /**
@@ -167,6 +200,7 @@ public class DeliveryServiceImpl implements DeliveryService{
      * @return 배송 경로
      */
     private List<DeliveryRoute> createRoutes(Delivery delivery){
+
         List<DeliveryRoute> routes = new ArrayList<>();
 
         UUID departureHubId = delivery.getDepartureHubId();
@@ -217,6 +251,7 @@ public class DeliveryServiceImpl implements DeliveryService{
                 .build();
 
         routes.add(hubToCompany);
+
         return routes;
     }
 
@@ -226,12 +261,13 @@ public class DeliveryServiceImpl implements DeliveryService{
      * 배송이 없는 경우 : 404
      * 배송이 이미 논리 삭제된 경우 : 404
      * 배송을 취소할 수 없는 경우 : 409
-     * @param deliveryId
+     * @param deliveryId 취소 대상 배송
      * @return 배송 취소 응답
      */
     @Override
     @Transactional
     public DeliveryCancelResponse cancelDelivery(UUID deliveryId) {
+
         Delivery delivery = deliveryRepository.findById(deliveryId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 배송을 찾을 수 없습니다."));
 
@@ -269,6 +305,7 @@ public class DeliveryServiceImpl implements DeliveryService{
     @Override
     @Transactional
     public void deleteDelivery(UUID deliveryId) {
+
         Delivery delivery = deliveryRepository.findById(deliveryId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 배송을 찾을 수 없습니다."));
 
