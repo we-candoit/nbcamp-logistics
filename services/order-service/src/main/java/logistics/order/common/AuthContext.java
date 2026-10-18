@@ -11,6 +11,9 @@ import static org.springframework.web.context.request.RequestAttributes.*;
 
 public class AuthContext {
 
+    //전체 권한 역할명 (대소문자 구분)
+    public static final String MASTER_ROLE = "MASTER";
+
     public static Optional<UUID> findUserId() {
         //등록된 username 가져오기
         Object userId = RequestContextHolder
@@ -53,6 +56,11 @@ public class AuthContext {
         return findUserRole().orElseThrow(
                 () -> new CustomException(ErrorCode.C500_INTERNAL_SERVER_ERROR)
         );
+    }
+
+    //현재 유저가 MASTER인가? / role이 없으면 getUserRole()과 동일하게 예외
+    public static boolean isMaster() {
+        return MASTER_ROLE.equals(getUserRole());
     }
 
 

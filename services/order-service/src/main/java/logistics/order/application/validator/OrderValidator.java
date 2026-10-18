@@ -38,7 +38,7 @@ public class OrderValidator {
 
     //주문한 유저가 해당 요청업체의 소속인가?
     private void validateUser(UUID requesterId) {
-        if (!AuthContext.getUserRole().equals("MASTER")) {
+        if (!AuthContext.isMaster()) {
             FetchUserByIdResponse user = userServiceClient.fetchUserById(AuthContext.getUserId());
 
             validateEqual(user.getCompanyId(), requesterId, ErrorCode.C403_FORBIDDEN_REQUESTER);

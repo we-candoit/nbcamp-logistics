@@ -19,6 +19,7 @@ import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
+import logistics.order.presentation.dto.response.GetOrderByIdResponse;
 import logistics.order.presentation.exception.CustomException;
 import logistics.order.presentation.exception.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
@@ -353,6 +354,83 @@ class OrderServiceTest {
             assertThatThrownBy(() -> orderService.create(orderRequest()))
                     .satisfies(e -> assertErrorCode(e, ErrorCode.C500_INTERNAL_SERVER_ERROR));
             verifyNoInteractions(orderTransactionService);
+        }
+    }
+
+    @Nested
+    @DisplayName("getOrderById()")
+    class GetOrderById {
+
+        private OrderItem savedOrderItem(UUID orderUserId) {
+            Order order = new Order(orderUserId, requesterId, requesterHubId, "서울시 강남구 테헤란로 1", "문 앞에 놓아주세요");
+            order.confirm(deliveryId);
+            return new OrderItem(itemId, "생수 2L", price, quantity, supplierHubId, supplierId, order);
+        }
+
+        @Test
+        public void 본인이_생성한_주문이면_주문정보를_반환한다() {
+            //given
+            loginAs("COMPANY_MANAGER");
+            OrderItem orderItem = savedOrderItem(userId);
+            UUID orderId = orderItem.getOrder().getId();
+            given(orderTransactionService.findOrderItemWithOrder(orderId)).willReturn(orderItem);
+
+            //when
+            GetOrderByIdResponse response = orderService.getOrderById(orderId);
+
+            //then
+            assertThat(response.getOrderId()).isEqualTo(orderId);
+            assertThat(response.getDeliveryId()).isEqualTo(deliveryId);
+            assertThat(response.getOrderUserId()).isEqualTo(userId);
+            assertThat(response.getRequesterId()).isEqualTo(requesterId);
+            assertThat(response.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            assertThat(response.getAddress()).isEqualTo("서울시 강남구 테헤란로 1");
+            assertThat(response.getRequestNote()).isEqualTo("문 앞에 놓아주세요");
+
+            assertThat(response.getItem().getItemId()).isEqualTo(itemId);
+            assertThat(response.getItem().getSupplierId()).isEqualTo(supplierId);
+            assertThat(response.getItem().getItemName()).isEqualTo("생수 2L");
+            assertThat(response.getItem().getPrice()).isEqualTo(price);
+            assertThat(response.getItem().getQuantity()).isEqualTo(quantity);
+            assertThat(response.getItem().getTotalPrice()).isEqualTo(price * quantity);
+        }
+
+        @Test
+        public void MASTER는_다른_사람의_주문도_조회한다() {
+            //given
+            loginAs("MASTER");
+            OrderItem orderItem = savedOrderItem(UUID.randomUUID());
+            UUID orderId = orderItem.getOrder().getId();
+            given(orderTransactionService.findOrderItemWithOrder(orderId)).willReturn(orderItem);
+
+            //when, then
+            assertThat(orderService.getOrderById(orderId).getOrderId()).isEqualTo(orderId);
+        }
+
+        @Test
+        public void 다른_사람의_주문이면_C403_예외가_발생한다() {
+            //given
+            loginAs("COMPANY_MANAGER");
+            OrderItem orderItem = savedOrderItem(UUID.randomUUID());
+            UUID orderId = orderItem.getOrder().getId();
+            given(orderTransactionService.findOrderItemWithOrder(orderId)).willReturn(orderItem);
+
+            //when, then
+            assertThatThrownBy(() -> orderService.getOrderById(orderId))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_ORDER));
+        }
+
+        @Test
+        public void 없는_주문이면_C404_예외가_전달된다() {
+            //given
+            loginAs("MASTER");
+            UUID orderId = UUID.randomUUID();
+            given(orderTransactionService.findOrderItemWithOrder(orderId))
+                    .willThrow(new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.getOrderById(orderId))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C404_ORDER_NOT_FOUND));
         }
     }
 }

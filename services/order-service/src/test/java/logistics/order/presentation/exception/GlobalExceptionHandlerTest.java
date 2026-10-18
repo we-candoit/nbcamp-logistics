@@ -16,11 +16,17 @@ import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.http.HttpMethod;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -162,6 +168,101 @@ class GlobalExceptionHandlerTest {
             assertThat(response.getBody().getMessage())
                     .doesNotContain("java.util.UUID")
                     .doesNotContain("JSON parse error");
+        }
+    }
+
+    @Nested
+    @DisplayName("handleMethodArgumentTypeMismatchException()")
+    class HandleMethodArgumentTypeMismatchException {
+
+        private MethodArgumentTypeMismatchException exceptionFor(String name, Object value) throws Exception {
+            MethodParameter parameter = new MethodParameter(
+                    OrderController.class.getMethod("getOrderById", UUID.class), 0);
+
+            return new MethodArgumentTypeMismatchException(value, UUID.class, name, parameter,
+                    new IllegalArgumentException("Invalid UUID string: " + value));
+        }
+
+        @Test
+        public void 파라미터명과_정해진_문구로_400을_응답한다() throws Exception {
+            //given
+            MethodArgumentTypeMismatchException e = exceptionFor("orderId", "abc");
+
+            //when
+            ResponseEntity<ErrorResponse> response = handler.handleMethodArgumentTypeMismatchException(e);
+
+            //then
+            assertErrorResponse(response, 400);
+            assertThat(response.getBody().getMessage()).isEqualTo("orderId: 형식이 올바르지 않습니다.");
+        }
+
+        @Test
+        public void 변환_실패_상세메시지는_응답에_노출하지_않는다() throws Exception {
+            //given
+            MethodArgumentTypeMismatchException e = exceptionFor("orderId", "abc");
+
+            //when
+            ResponseEntity<ErrorResponse> response = handler.handleMethodArgumentTypeMismatchException(e);
+
+            //then
+            assertThat(response.getBody().getMessage())
+                    .doesNotContain("java.util.UUID")
+                    .doesNotContain("Invalid UUID string");
+        }
+    }
+
+    @Nested
+    @DisplayName("handleException()")
+    class HandleException {
+
+        @Test
+        public void 예상하지_못한_예외는_500과_정해진_문구로_응답한다() {
+            //given
+            NullPointerException e = new NullPointerException("Cannot invoke \"java.lang.Long.longValue()\"");
+
+            //when
+            ResponseEntity<ErrorResponse> response = handler.handleException(e);
+
+            //then
+            assertErrorResponse(response, 500);
+            assertThat(response.getBody().getMessage()).isEqualTo("서버 내부 오류가 발생했습니다.");
+        }
+
+        @Test
+        public void 예외의_내부_메시지는_응답에_노출하지_않는다() {
+            //given
+            IllegalStateException e = new IllegalStateException("could not execute statement [p_order]");
+
+            //when
+            ResponseEntity<ErrorResponse> response = handler.handleException(e);
+
+            //then
+            assertThat(response.getBody().getMessage()).doesNotContain("p_order");
+        }
+
+        @Test
+        public void 지원하지_않는_HTTP_메서드는_405를_유지한다() {
+            //given
+            HttpRequestMethodNotSupportedException e = new HttpRequestMethodNotSupportedException("PUT", List.of("GET", "POST"));
+
+            //when
+            ResponseEntity<ErrorResponse> response = handler.handleException(e);
+
+            //then
+            assertErrorResponse(response, 405);
+            assertThat(response.getBody().getMessage()).isEqualTo("요청을 처리할 수 없습니다.");
+        }
+
+        @Test
+        public void 없는_경로는_404를_유지한다() {
+            //given
+            NoResourceFoundException e = new NoResourceFoundException(HttpMethod.GET, "/api/unknown", "api/unknown");
+
+            //when
+            ResponseEntity<ErrorResponse> response = handler.handleException(e);
+
+            //then
+            assertErrorResponse(response, 404);
         }
     }
 

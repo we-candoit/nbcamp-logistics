@@ -9,6 +9,9 @@ import logistics.order.domain.enums.OrderStatus;
 import logistics.order.infrastructure.AuditorAwareImpl;
 import logistics.order.infrastructure.repository.OrderItemRepository;
 import logistics.order.infrastructure.repository.OrderRepository;
+import logistics.order.presentation.exception.CustomException;
+import logistics.order.presentation.exception.ErrorCode;
+import org.hibernate.Hibernate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -211,6 +214,55 @@ class OrderTransactionServiceTest {
                 orderItemRepository.save(orderItem(order));
                 em.flush();
             }).rootCause().hasMessageContaining("Unique index or primary key violation");
+        }
+    }
+
+    @Nested
+    @DisplayName("findOrderItemWithOrder()")
+    class FindOrderItemWithOrder {
+
+        @Test
+        public void 주문ID로_주문상품과_주문을_함께_조회한다() {
+            //given
+            Order order = confirmedOrder();
+            OrderItem orderItem = orderItem(order);
+            orderTransactionService.save(order, orderItem);
+            em.flush();
+            em.clear();
+
+            //when
+            OrderItem found = orderTransactionService.findOrderItemWithOrder(order.getId());
+
+            //then
+            assertThat(found.getId()).isEqualTo(orderItem.getId());
+            //fetch join → 주문이 프록시가 아닌 실제 엔티티로 로딩됨
+            assertThat(Hibernate.isInitialized(found.getOrder())).isTrue();
+            assertThat(found.getOrder().getId()).isEqualTo(order.getId());
+        }
+
+        @Test
+        public void 없는_주문이면_C404_예외가_발생한다() {
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.findOrderItemWithOrder(UUID.randomUUID()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+
+        @Test
+        public void 삭제된_주문이면_C404_예외가_발생한다() {
+            //given
+            Order order = confirmedOrder();
+            orderTransactionService.save(order, orderItem(order));
+            order.softDelete(userId);
+            em.flush();
+            em.clear();
+
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.findOrderItemWithOrder(order.getId()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
         }
     }
 
