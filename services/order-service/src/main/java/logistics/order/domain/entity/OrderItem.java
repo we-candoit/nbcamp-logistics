@@ -6,11 +6,10 @@ import logistics.order.common.entity.BaseEntity;
 import logistics.order.domain.enums.OrderItemStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.util.UUID;
 
-@Entity @Getter @Setter
+@Entity @Getter
 @Table(name = "p_order_item")
 @NoArgsConstructor
 public class OrderItem extends BaseEntity {

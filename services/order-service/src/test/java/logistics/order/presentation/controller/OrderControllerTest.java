@@ -5,7 +5,9 @@ import feign.RetryableException;
 import logistics.order.application.service.OrderService;
 import logistics.order.common.AuthHeaders;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
+import logistics.order.domain.enums.OrderStatus;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
+import logistics.order.presentation.dto.response.GetOrderByIdResponse;
 import logistics.order.presentation.exception.CustomException;
 import logistics.order.presentation.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +40,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -299,6 +303,28 @@ class OrderControllerTest {
         }
 
         @Test
+        public void 예상하지_못한_예외가_발생하면_500과_정해진_문구를_반환한다() throws Exception {
+            //given
+            given(orderService.create(any())).willThrow(new IllegalStateException("could not execute statement"));
+
+            //when, then
+            mockMvc.perform(createOrder(validBody()))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.status").value(500))
+                    .andExpect(jsonPath("$.message").value("서버 내부 오류가 발생했습니다."));
+        }
+
+        @Test
+        public void 지원하지_않는_HTTP_메서드면_405를_반환한다() throws Exception {
+            //when, then
+            mockMvc.perform(put("/api/orders")
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isMethodNotAllowed())
+                    .andExpect(jsonPath("$.status").value(405));
+        }
+
+        @Test
         public void 외부서비스가_응답하지_않으면_503을_반환한다() throws Exception {
             //given
             Request request = Request.create(Request.HttpMethod.GET, "http://mock",
@@ -311,6 +337,80 @@ class OrderControllerTest {
                     .andExpect(status().isServiceUnavailable())
                     .andExpect(jsonPath("$.status").value(503))
                     .andExpect(jsonPath("$.message").value("외부 서비스에 연결할 수 없습니다."));
+        }
+    }
+
+    @Nested
+    @DisplayName("주문 단건 조회")
+    class GetOrder {
+
+        private GetOrderByIdResponse response() {
+            return new GetOrderByIdResponse(orderId, deliveryId, userId, requesterId, OrderStatus.CONFIRMED,
+                    "서울시 강남구", "문 앞에 놓아주세요",
+                    new GetOrderByIdResponse.Item(itemId, supplierId, "생수 2L", 15000L, 3L, 45000L),
+                    LocalDateTime.of(2026, 10, 18, 12, 0));
+        }
+
+        @Test
+        public void 정상_요청이면_200과_주문정보를_반환한다() throws Exception {
+            //given
+            given(orderService.getOrderById(orderId)).willReturn(response());
+
+            //when, then
+            mockMvc.perform(get("/api/orders/{orderId}", orderId)
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.orderId").value(orderId.toString()))
+                    .andExpect(jsonPath("$.status").value("CONFIRMED"))
+                    .andExpect(jsonPath("$.deliveryId").value(deliveryId.toString()))
+                    .andExpect(jsonPath("$.orderUserId").value(userId.toString()))
+                    .andExpect(jsonPath("$.requesterId").value(requesterId.toString()))
+                    .andExpect(jsonPath("$.address").value("서울시 강남구"))
+                    .andExpect(jsonPath("$.requestNote").value("문 앞에 놓아주세요"))
+                    .andExpect(jsonPath("$.createdAt").exists())
+                    .andExpect(jsonPath("$.item.itemId").value(itemId.toString()))
+                    .andExpect(jsonPath("$.item.supplierId").value(supplierId.toString()))
+                    .andExpect(jsonPath("$.item.itemName").value("생수 2L"))
+                    .andExpect(jsonPath("$.item.price").value(15000))
+                    .andExpect(jsonPath("$.item.quantity").value(3))
+                    .andExpect(jsonPath("$.item.totalPrice").value(45000));
+        }
+
+        @Test
+        public void 없는_주문이면_404를_반환한다() throws Exception {
+            //given
+            given(orderService.getOrderById(orderId)).willThrow(new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+
+            //when, then
+            mockMvc.perform(get("/api/orders/{orderId}", orderId)
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.status").value(404));
+        }
+
+        @Test
+        public void 주문ID가_UUID_형식이_아니면_400을_반환하고_서비스를_호출하지_않는다() throws Exception {
+            //when, then
+            mockMvc.perform(get("/api/orders/{orderId}", "abc")
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400))
+                    .andExpect(jsonPath("$.message").value("orderId: 형식이 올바르지 않습니다."))
+                    .andExpect(jsonPath("$.timestamp").exists());
+
+            verify(orderService, never()).getOrderById(any());
+        }
+
+        @Test
+        public void 인증_헤더가_없으면_401을_반환한다() throws Exception {
+            //when, then
+            mockMvc.perform(get("/api/orders/{orderId}", orderId))
+                    .andExpect(status().isUnauthorized());
+
+            verify(orderService, never()).getOrderById(any());
         }
     }
 }

@@ -10,8 +10,14 @@ import logistics.order.infrastructure.client.HubServiceClient;
 import logistics.order.infrastructure.client.dto.*;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
+import logistics.order.presentation.dto.response.GetOrderByIdResponse;
+import logistics.order.presentation.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.util.UUID;
+
+import static logistics.order.application.validator.CommonValidator.validateEqual;
 
 @Service
 @RequiredArgsConstructor
@@ -57,6 +63,17 @@ public class OrderService {
                 order.getDeliveryId(),
                 order.getCreatedAt()
         );
+    }
+
+    public GetOrderByIdResponse getOrderById(UUID orderId) {
+        OrderItem orderItem = orderTransactionService.findOrderItemWithOrder(orderId);
+
+        //MASTER는 모든 주문 조회 가능 / 그 외는 본인이 생성한 주문만 조회 가능
+        if (!AuthContext.isMaster()) {
+            validateEqual(orderItem.getOrder().getOrderUserId(), AuthContext.getUserId(), ErrorCode.C403_FORBIDDEN_ORDER);
+        }
+
+        return GetOrderByIdResponse.from(orderItem);
     }
 
     private OrderItem buildOrderItem(CreateOrderRequest request, FetchCompanyByIdResponse supplierCompany,

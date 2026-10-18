@@ -7,11 +7,10 @@ import logistics.order.presentation.exception.CustomException;
 import logistics.order.presentation.exception.ErrorCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.util.UUID;
 
-@Entity @Getter @Setter
+@Entity @Getter
 @Table(name = "p_order")
 @NoArgsConstructor
 public class Order extends BaseEntity {
