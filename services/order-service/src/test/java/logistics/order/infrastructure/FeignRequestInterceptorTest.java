@@ -36,14 +36,14 @@ class FeignRequestInterceptorTest {
     }
 
     @Nested
-    @DisplayName("정상 실행")
+    @DisplayName("정상 케이스")
     class Success {
 
         @Test
         @DisplayName("요청 속성에 userId, role이 있으면 두 헤더 모두 추가된다")
         void apply_withUserIdAndRole() {
             UUID userId = UUID.randomUUID();
-            request.setAttribute(USER_ID, userId);
+            request.setAttribute(USER_ID, userId.toString());
             request.setAttribute(ROLE, "MASTER");
 
             interceptor.apply(template);
@@ -56,7 +56,7 @@ class FeignRequestInterceptorTest {
         @DisplayName("userId만 있으면 USER_ID 헤더만 추가된다")
         void apply_withOnlyUserId() {
             UUID userId = UUID.randomUUID();
-            request.setAttribute(USER_ID, userId);
+            request.setAttribute(USER_ID, userId.toString());
 
             interceptor.apply(template);
 
@@ -77,7 +77,7 @@ class FeignRequestInterceptorTest {
     }
 
     @Nested
-    @DisplayName("에러 / 예외 상황")
+    @DisplayName("실패 케이스")
     class Failure {
 
         @Test
@@ -89,9 +89,21 @@ class FeignRequestInterceptorTest {
         }
 
         @Test
-        @DisplayName("userId가 UUID 타입이 아니면 USER_ID 헤더를 추가하지 않는다")
+        @DisplayName("userId가 UUID 형식이 아닌 문자열이면 예외 없이 USER_ID 헤더를 추가하지 않는다")
+        void apply_withInvalidUserIdFormat() {
+            request.setAttribute(USER_ID, "user1");
+            request.setAttribute(ROLE, "MASTER");
+
+            interceptor.apply(template);
+
+            assertThat(template.headers()).doesNotContainKey(USER_ID);
+            assertThat(template.headers().get(ROLE)).containsExactly("MASTER");
+        }
+
+        @Test
+        @DisplayName("userId가 String 타입이 아니면 USER_ID 헤더를 추가하지 않는다")
         void apply_withInvalidUserIdType() {
-            request.setAttribute(USER_ID, UUID.randomUUID().toString());
+            request.setAttribute(USER_ID, UUID.randomUUID());
             request.setAttribute(ROLE, "MASTER");
 
             interceptor.apply(template);
@@ -104,7 +116,7 @@ class FeignRequestInterceptorTest {
         @DisplayName("role이 String 타입이 아니면 ROLE 헤더를 추가하지 않는다")
         void apply_withInvalidRoleType() {
             UUID userId = UUID.randomUUID();
-            request.setAttribute(USER_ID, userId);
+            request.setAttribute(USER_ID, userId.toString());
             request.setAttribute(ROLE, 1);
 
             interceptor.apply(template);
