@@ -1,16 +1,20 @@
 package logistics.delivery.application;
 
+import feign.FeignException;
 import logistics.delivery.domain.entity.Delivery;
 import logistics.delivery.domain.entity.DeliveryRoute;
 import logistics.delivery.domain.enums.DeliveryStatus;
 import logistics.delivery.domain.enums.RouteType;
 import logistics.delivery.infrastructure.client.HubClient;
+import logistics.delivery.infrastructure.client.OrderClient;
 import logistics.delivery.infrastructure.client.dto.HubRouteResponse;
+import logistics.delivery.infrastructure.client.dto.OrderDetailResponse;
 import logistics.delivery.infrastructure.repository.DeliveryRepository;
 import logistics.delivery.infrastructure.repository.DeliveryRouteRepository;
 import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
 import logistics.delivery.presentation.dto.response.DeliveryCancelResponse;
 import logistics.delivery.presentation.dto.response.DeliveryCreateResponse;
+import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.http.HttpStatus;
@@ -31,7 +35,77 @@ public class DeliveryServiceImpl implements DeliveryService{
     private final DeliveryRepository deliveryRepository;
     private final DeliveryRouteRepository deliveryRouteRepository;
     private final HubClient hubClient;
+    private final OrderClient orderClient;
     private final AuditorAware<String> auditorAware;
+
+    /**
+     * 배송 상세 조회
+     * @param deliveryId 조회할 배송
+     * @param userId 배송 담당자, 주문자(요청 업체)와 비교할 요청자 ID
+     * @param role MASTER의 전체 조회 권한 확인
+     * @return
+     */
+    @Override
+    public DeliveryDetailResponse getDeliveryDetail(UUID deliveryId, UUID userId, String username, String role) {
+
+        // 조회 권한 검증
+        if(!"MASTER".equals(role) && !"USER".equals(role)){
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "허용되지 않은 권한입니다.");
+        }
+
+        Delivery delivery = deliveryRepository.findByIdAndDeletedAtIsNull(deliveryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송을 찾을 수 없습니다."));
+
+        // MASTER, 배송 또는 배송 경로 담당자는 바로 조회 허용
+        if("MASTER".equals(role) || isDeliveryManager(delivery, userId)){
+            return DeliveryDetailResponse.from(delivery);
+        }
+
+        // 나머지 사용자는 해당 배송의 주문자인지 확인
+        OrderDetailResponse order;
+
+        try{
+            order = orderClient.getOrderDetail(
+                    delivery.getOrderId(),
+                    userId,
+                    username,
+                    role
+            );
+        } catch (FeignException e){
+            if(e.status() == 403 || e.status() == 404){
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "배송을 찾을 수 없습니다.");
+            }
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "주문자 정보를 확인할 수 없습니다.", e);
+        }
+        if(order == null
+                || order.orderUserId() == null
+                || !delivery.getOrderId().equals(order.orderId())){
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "주문 서비스의 응답을 확인할 수 없습니다.");
+        }
+
+        // 조회 권한이 없는 사용자에게 배송 존재여부를 숨기기 위해 404로 통일
+        if (!userId.equals(order.orderUserId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "배송을 찾을 수 없습니다."
+            );
+        }
+
+        return DeliveryDetailResponse.from(delivery);
+    }
+
+    /**
+     * 배송 상세 조회 요청자가 배송 담당자 또는 배송 경로 담당자 인지 확인하는 private 메서드
+     * @param delivery 조회 대상 배송
+     * @param userId 조회를 요청한 사용자 id
+     * @return 배송 담당 여부
+     */
+    private boolean isDeliveryManager(Delivery delivery, UUID userId){
+        if(userId.equals(delivery.getManagerId())) return true;
+
+        return deliveryRouteRepository
+                .existsByDeliveryIdAndManagerIdAndDeletedAtIsNull(delivery.getId(), userId);
+    }
 
     /**
      * 배송 생성
@@ -89,7 +163,7 @@ public class DeliveryServiceImpl implements DeliveryService{
 
     /**
      * 허브 서비스를 조회해 배송 경로를 생성하는 private 메서드
-     * @param delivery 배송 객체
+     * @param delivery 생성 대상 배송
      * @return 배송 경로
      */
     private List<DeliveryRoute> createRoutes(Delivery delivery){

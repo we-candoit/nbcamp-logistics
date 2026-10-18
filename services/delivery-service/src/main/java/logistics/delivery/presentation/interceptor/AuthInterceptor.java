@@ -7,10 +7,32 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.util.UUID;
+
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
+
+    public static final String USER_ID_HEADER = "X-User-Id";
     public static final String USER_HEADER = "X-User-Name";
     public static final String ROLE_HEADER = "X-Role-Name";
+
+    public static UUID getUserId(HttpServletRequest request){
+        String userId = request.getHeader(USER_ID_HEADER);
+
+        if(userId == null || userId.isBlank()){
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "사용자 ID 헤더가 필요합니다."
+            );
+        }
+
+        try{
+            return UUID.fromString(userId);
+        } catch(IllegalArgumentException e){
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "사용자 ID는 UUID 형식이어야 합니다."
+            );
+        }
+    }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
