@@ -1,20 +1,19 @@
 package logistics.order.infrastructure.client;
 
-import jakarta.ws.rs.QueryParam;
-import logistics.order.infrastructure.dto.FetchCompaniesByIdsResponse;
-import logistics.order.infrastructure.dto.FetchItemsByIdsResponse;
+import logistics.order.infrastructure.client.dto.FetchCompanyByIdResponse;
+import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 
-import java.util.List;
 import java.util.UUID;
 
 @FeignClient(name = "${COMPANY_SERVICE_NAME}")
 public interface CompanyServiceClient {
 
-    @GetMapping("/internal/companies")
-    FetchCompaniesByIdsResponse fetchCompaniesByIds(@QueryParam("ids") List<UUID> companyIds);
+    @GetMapping("/api/items/{itemId}")
+    FetchItemByIdResponse fetchItemById(@PathVariable("itemId") UUID itemId);
 
-    @GetMapping("/internal/items")
-    FetchItemsByIdsResponse fetchItemsByIds(@QueryParam("ids") List<UUID> itemIds);
+    @GetMapping("/api/companies/{companyId}")
+    FetchCompanyByIdResponse fetchCompanyById(@PathVariable("companyId") UUID companyId);
 }
