@@ -3,6 +3,8 @@ package logistics.order.domain.entity;
 import jakarta.persistence.*;
 import logistics.order.common.entity.BaseEntity;
 import logistics.order.domain.enums.OrderStatus;
+import logistics.order.presentation.exception.CustomException;
+import logistics.order.presentation.exception.ErrorCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -46,7 +48,17 @@ public class Order extends BaseEntity {
         this.requestNote = requestNote;
     }
 
+    //주문확정, WAITING 상태에서만 가능
     public void confirm(UUID deliveryId) {
+        //배송생성 응답에 배송ID가 없는 경우 서버측 문제
+        if (deliveryId == null) {
+            throw new CustomException(ErrorCode.C500_INTERNAL_SERVER_ERROR);
+        }
+
+        if (this.orderStatus != OrderStatus.WAITING) {
+            throw new CustomException(ErrorCode.C409_INVALID_ORDER_STATUS);
+        }
+
         this.deliveryId = deliveryId;
         this.orderStatus = OrderStatus.CONFIRMED;
     }
