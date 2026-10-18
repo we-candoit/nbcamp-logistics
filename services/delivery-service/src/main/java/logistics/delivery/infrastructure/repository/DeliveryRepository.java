@@ -10,4 +10,7 @@ public interface DeliveryRepository extends JpaRepository<Delivery, UUID> {
 
     // 주문id로 기존에 생성된 배송 조회 메서드
     Optional<Delivery> findByOrderId(UUID orderId);
+
+    // 삭제되지 않은 배송만 조회하는 메서드
+    Optional<Delivery> findByIdAndDeletedAtIsNull(UUID id);
 }

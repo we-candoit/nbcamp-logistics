@@ -11,11 +11,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class InterceptorConfig implements WebMvcConfigurer {
     private final AuthInterceptor authInterceptor;
 
-
-    // 우선 내부api만 매핑
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
-                .addPathPatterns("/internal/**");
+                .addPathPatterns(
+                        "/internal/**",
+                        "/api/deliveries/**"
+                );
     }
 }

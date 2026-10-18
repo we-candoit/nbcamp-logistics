@@ -18,7 +18,7 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/internal/deliveries")
-public class DeliveryInternalApi implements DeliveryApiSpec{
+public class DeliveryInternalApi implements DeliveryInternalApiSpec{
 
     private final DeliveryService deliveryService;
 
