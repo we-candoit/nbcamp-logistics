@@ -17,9 +17,13 @@ public class AuthContext {
                 .currentRequestAttributes()
                 .getAttribute(AuthHeaders.USER_ID, SCOPE_REQUEST);
 
-        //UUID인 경우 캐스팅
-        if (userId instanceof UUID) {
-            return Optional.of((UUID) userId);
+        //String인 경우 UUID로 변환 / UUID 형식이 아니면 empty
+        if (userId instanceof String stringUserId) {
+            try {
+                return Optional.of(UUID.fromString(stringUserId));
+            } catch (IllegalArgumentException e) {
+                return Optional.empty();
+            }
         }
 
         return Optional.empty();
