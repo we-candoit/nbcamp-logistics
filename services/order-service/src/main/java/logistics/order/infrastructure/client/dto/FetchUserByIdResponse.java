@@ -1,14 +1,13 @@
-package logistics.order.infrastructure.dto;
+package logistics.order.infrastructure.client.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
 import java.util.UUID;
 
 @Data
 @AllArgsConstructor @NoArgsConstructor
-public class FetchCompaniesByIdsRequest {
-    List<UUID> itemIds;
+public class FetchUserByIdResponse {
+    private UUID companyId;
 }

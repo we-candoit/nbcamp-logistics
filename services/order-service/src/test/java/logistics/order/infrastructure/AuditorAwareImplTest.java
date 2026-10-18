@@ -36,13 +36,26 @@ class AuditorAwareImplTest {
     public void username이_있는_경우() {
         //given
         UUID userId = UUID.randomUUID();
-        request.setAttribute(AuthHeaders.USER_ID, userId);
+        request.setAttribute(AuthHeaders.USER_ID, userId.toString());
 
         //when
         Optional<UUID> findUserId = auditorAwareImpl.getCurrentAuditor();
 
         //then
         assertThat(findUserId).contains(userId);
+    }
+
+    //username이 UUID 형식이 아닌 경우
+    @Test
+    public void username이_UUID형식이_아닌_경우() {
+        //given
+        request.setAttribute(AuthHeaders.USER_ID, "user1");
+
+        //when
+        Optional<UUID> findUserId = auditorAwareImpl.getCurrentAuditor();
+
+        //then
+        assertThat(findUserId).isEmpty();
     }
 
     //username이 null인 경우

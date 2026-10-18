@@ -8,39 +8,47 @@ import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
-public abstract class BaseEntity {
+public abstract class BaseEntity implements Persistable<UUID> {
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @CreatedBy
-    @Column(length = 100, updatable = false, nullable = false)
-    private String createdBy;
+    @Column(updatable = false, nullable = false)
+    private UUID createdBy;
 
     @LastModifiedDate
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
     @LastModifiedBy
-    @Column(length = 100, nullable = false)
-    private String updatedBy;
+    @Column(nullable = false)
+    private UUID updatedBy;
 
     @Column
     private LocalDateTime deletedAt;
 
-    @Column(length = 100)
-    private String deletedBy;
+    @Column
+    private UUID deletedBy;
 
-    public void softDelete(String username) {
+    @Override
+    public boolean isNew() {
+        return createdAt == null;
+    }
+
+    public void softDelete(UUID userId) {
         this.deletedAt = LocalDateTime.now();
-        this.deletedBy = username;
+        this.deletedBy = userId;
     }
 
     public boolean isDeleted() {
