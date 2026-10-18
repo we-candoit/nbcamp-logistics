@@ -13,4 +13,7 @@ public interface DeliveryRouteRepository extends JpaRepository<DeliveryRoute, UU
 
     // 요청자가 해당 배송의 담당자인지 확인하는 조회 메서드
     boolean existsByDeliveryIdAndManagerIdAndDeletedAtIsNull(UUID deliveryId, UUID managerId);
+
+    // 삭제되지 않은 배송 경로를 순서대로 조회하는 메스드
+    List<DeliveryRoute> findAllByDeliveryIdAndDeletedAtIsNullOrderBySequenceAsc(UUID deliveryId);
 }
