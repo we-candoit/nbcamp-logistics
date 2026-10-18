@@ -3,6 +3,8 @@ package logistics.company.presentation.exception;
 import feign.FeignException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -16,6 +18,8 @@ import java.util.List;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final String UK_COMPANY_MANAGER_ACTIVE = "uk_company_manager_active";
 
     // 업무 예외 처리: 리소스 없음(404), 권한 없음(403) 등
     @ExceptionHandler(BusinessException.class)
@@ -72,6 +76,25 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleFeignException(FeignException e, HttpServletRequest request) {
         log.error("External service call failed: status={}, message={}", e.status(), e.getMessage());
         return toResponse(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, request);
+    }
+
+    // 동시 요청으로 인한 인덱스 위반
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException e,
+            HttpServletRequest request
+    ) {
+        // 담당자 1인 1업체 인덱스 위반 → 409
+        if (isConstraintViolation(e)) {
+            return handleBusinessException(
+                    new BusinessException(ErrorCode.MANAGER_ALREADY_ASSIGNED), request);
+        }
+        // 그 외 무결성 위반 → 500
+        return toResponse(ErrorCode.INTERNAL_SERVER_ERROR, request);
+    }
+
+    private boolean isConstraintViolation(DataIntegrityViolationException e) {
+        return true; // TODO
     }
 
     private ResponseEntity<ErrorResponse> toResponse(ErrorCode errorCode, HttpServletRequest request) {

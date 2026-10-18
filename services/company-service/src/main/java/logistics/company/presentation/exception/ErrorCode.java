@@ -18,6 +18,7 @@ public enum ErrorCode {
     EXTERNAL_SERVICE_UNAVAILABLE(503, "연동 서비스 호출에 실패했습니다."),
 
     // 업체
+    COMPANY_CREATE_FORBIDDEN(403, "업체 등록 권한이 없습니다."),
     COMPANY_NOT_FOUND(404, "업체를 찾을 수 없습니다."),
     MANAGER_ALREADY_ASSIGNED(409, "이미 다른 업체를 담당하고 있는 사용자입니다."),
     COMPANY_HAS_ACTIVE_ORDERS(409, "진행 중인 주문이 있어 업체를 삭제할 수 없습니다."),
