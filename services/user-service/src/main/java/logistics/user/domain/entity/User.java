@@ -1,19 +1,14 @@
 package logistics.user.domain.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
 import logistics.user.common.entity.BaseEntity;
+import logistics.user.domain.enums.AffiliationStatus;
+import logistics.user.domain.enums.AffiliationType;
 import logistics.user.domain.enums.UserRole;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 
 import java.util.UUID;
@@ -39,38 +34,71 @@ public class User extends BaseEntity {
     private String name; // 회원 이름
 
     @Column(unique = true)
-    private String email;
+    private String email; // 이메일 필수X
 
     @Column(nullable = false, length = 100, unique = true)
     private String slackId;
 
     @Column(nullable = false)
-    private boolean isDeliveryManager; // 배송담당자인지 확인, 기본값: false(메서드로 신청)
+    private boolean isDeliveryManager; // 배송담당자인지 확인[HUB소속은 true, COMPANY소속은 false]
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private UserRole role;
+    private UserRole role; // [USER, MASTER] 유저 권한
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AffiliationType affiliationType;  // [HUB,COMPANY] 어디 소속인지
 
     @Column(nullable = false, length = 100)
-    private String affiliationName; // 소속 업체명(회원가입 시 제출)
+    private String affiliationName; // 소속 허브or업체 명
+
+    private UUID hubId; // 허브 소속으로 회원가입 시 할당 허브명 검증 후 할당
+    private UUID companyId; // MASTER를 통한 업체 생성 및 소속 등록 시 할당
+
+    // 허브or업체 소속 확정 상태, COMPANY 소속인데 PENDING인 경우 주문 불가능
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AffiliationStatus affiliationStatus; // [PENDING, CONFIRMED] 허브소속은 바로 CONFIRMED, 업체 소속은 PENDING -> 업체 생성 또는 소속 등록 시 CONFIRMED
 
     @Column(nullable = false)
     private boolean isPublic; // 정보 공개 가능 여부, 기본값: true
 
-    private User(String loginId, String password, String name, String email, String slackId, String affiliationName) {
+    private User(String loginId, String password, String name, String email, String slackId,
+                 UserRole role, AffiliationType affiliationType,
+                 String affiliationName, AffiliationStatus affiliationStatus) {
         this.loginId = loginId;
         this.password = password;
         this.name = name;
         this.email = email;
         this.slackId = slackId;
-        this.isDeliveryManager = false;
-        this.role = UserRole.USER;
+        this.isDeliveryManager = false; // 배송 담당자 기본 false, 권한부여 메서드로 부여함
+        this.role = role;
+        this.affiliationType = affiliationType;
         this.affiliationName = affiliationName;
+        this.affiliationStatus = affiliationStatus;
         this.isPublic = true;
+        initAuditor(loginId); // 생성자, 수정자 설정
     }
 
-    public static User create(String loginId, String password, String name, String email, String slackId, String affiliationName) {
-        return new User(loginId, password, name, email, slackId, affiliationName);
+    // 허브 소속 회원가입
+    public static User createHubUser(String loginId, String password, String name, String email, String slackId, UUID hubId, String hubName) {
+        if (hubId == null) {
+            throw new IllegalArgumentException("허브 소속은 hubID가 필요합니다.");
+        }
+        User user = new User(loginId, password, name, email, slackId,
+                UserRole.USER, AffiliationType.HUB, hubName, AffiliationStatus.CONFIRMED);
+        user.grantDeliveryManager(); // 허브 유저는 배송 담당자 권한 부여
+        user.hubId = hubId;
+
+        return user;
+    }
+
+    // 업체 소속 회원가입
+    public static User createCompanyUser(String loginId, String password, String name, String email, String slackId, String companyName) {
+        return new User(loginId, password, name, email, slackId,
+                UserRole.USER, AffiliationType.COMPANY, companyName, AffiliationStatus.PENDING);
     }
 
     // 배송담당자 권한 부여
