@@ -1,11 +1,9 @@
 package logistics.delivery.application;
 
+import logistics.delivery.presentation.dto.request.DeliveryAssignRequest;
 import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
 import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
-import logistics.delivery.presentation.dto.response.DeliveryCancelResponse;
-import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
-import logistics.delivery.presentation.dto.response.DeliveryRouteResponse;
-import logistics.delivery.presentation.dto.response.DeliverySearchResponse;
+import logistics.delivery.presentation.dto.response.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -38,6 +36,14 @@ public interface DeliveryService {
             DeliverySearchRequest request,
             Pageable pageable,
             UUID userId,
+            String role
+    );
+
+    DeliveryAssignResponse assignDeliveryManager(
+            UUID deliveryId,
+            UUID routeId,
+            DeliveryAssignRequest request,
+            UUID requesterId,
             String role
     );
 }

@@ -81,4 +81,22 @@ public class DeliveryRoute extends BaseEntity {
 
         status = DeliveryRouteStatus.CANCELLED;
     }
+
+    // 배송 경로 담당자 배정
+    public void assignManager(UUID managerId){
+        if(managerId == null){
+            throw new IllegalArgumentException("배정할 담당자 ID가 필요합니다.");
+        }
+
+        if(status != DeliveryRouteStatus.WAITING){
+            throw new IllegalStateException("대기 중인 배송 경로에만 담당자를 배정할 수 있습니다,");
+        }
+
+        if(this.managerId != null){
+            if(this.managerId.equals(managerId)) return;
+
+            throw new IllegalStateException("이미 다른 담당자가 배정되어 있습니다.");
+        }
+        this.managerId = managerId;
+    }
 }

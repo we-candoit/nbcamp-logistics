@@ -11,7 +11,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import logistics.delivery.presentation.dto.request.DeliveryAssignRequest;
 import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
+import logistics.delivery.presentation.dto.response.DeliveryAssignResponse;
 import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
 import logistics.delivery.presentation.dto.response.DeliveryRouteResponse;
 import logistics.delivery.presentation.dto.response.DeliverySearchResponse;
@@ -20,6 +23,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
@@ -272,6 +276,70 @@ public interface DeliveryApiSpec {
     ResponseEntity<List<DeliveryRouteResponse>> getDeliveryRoutes(
             @Parameter(description = "조회할 배송 ID", required = true)
             @PathVariable("id") UUID deliveryId,
+            @Parameter(hidden = true)
+            HttpServletRequest request
+    );
+
+    @Operation(
+            summary = "배송 경로 담당자 배정",
+            description = """
+                MASTER만 담당자를 배정할 수 있습니다.
+                배송이 WAITING, HUB_IN_TRANSIT, HUB_ARRIVED이고
+                대상 경로가 WAITING인 경우에만 허용합니다.
+                기존 담당자를 다른 사용자로 변경하는 기능은 지원하지 않습니다.
+                """
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "배정 성공 또는 동일 담당자 재요청",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = DeliveryAssignResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(responseCode = "400", description = "요청 형식, 필수값 오류", content = @Content),
+            @ApiResponse(responseCode = "401", description = "필수 사용자 정보 누락", content = @Content),
+            @ApiResponse(responseCode = "403", description = "MASTER가 아닌 요청자", content = @Content),
+            @ApiResponse(responseCode = "404", description = "배송, 배송 경로 없음 또는 삭제됨", content = @Content),
+            @ApiResponse(responseCode = "409", description = "배정 불가 상태 또는 다른 담당자 배정됨", content = @Content),
+            @ApiResponse(responseCode = "422", description = "배정 대상 사용자 없음 또는 자격, 소속 조건 불충족", content = @Content),
+            @ApiResponse(responseCode = "503", description = "사용자 정보 검증 불가", content = @Content)
+    })
+    @Parameters({
+            @Parameter(
+                    name = "X-User-Id",
+                    in = ParameterIn.HEADER,
+                    required = true,
+                    description = "배정을 요청하는 MASTER의 사용자 ID",
+                    schema = @Schema(type = "string", format = "uuid")
+            ),
+            @Parameter(
+                    name = "X-User-Name",
+                    in = ParameterIn.HEADER,
+                    required = true,
+                    description = "감사 기록에 사용할 요청자 username"
+            ),
+            @Parameter(
+                    name = "X-Role-Name",
+                    in = ParameterIn.HEADER,
+                    required = true,
+                    schema = @Schema(
+                            type = "string",
+                            allowableValues = {"MASTER"}
+                    )
+            )
+    })
+    ResponseEntity<DeliveryAssignResponse> assignDeliveryManager(
+            @Parameter(description = "배송 ID", required = true)
+            @PathVariable("deliveryId") UUID deliveryId,
+
+            @Parameter(description = "배정할 배송 경로 ID", required = true)
+            @PathVariable("routeId") UUID routeId,
+
+            @Valid @RequestBody DeliveryAssignRequest assignRequest,
+
             @Parameter(hidden = true)
             HttpServletRequest request
     );
