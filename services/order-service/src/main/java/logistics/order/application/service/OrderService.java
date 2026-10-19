@@ -4,20 +4,20 @@ import logistics.order.application.validator.OrderValidator;
 import logistics.order.common.AuthContext;
 import logistics.order.domain.entity.Order;
 import logistics.order.domain.entity.OrderItem;
+import logistics.order.domain.enums.OrderStatus;
 import logistics.order.infrastructure.client.CompanyServiceClient;
 import logistics.order.infrastructure.client.DeliveryServiceClient;
 import logistics.order.infrastructure.client.HubServiceClient;
 import logistics.order.infrastructure.client.dto.*;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
+import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
-import logistics.order.presentation.dto.response.GetOrderByIdResponse;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.presentation.dto.response.OrderDetailResponse;
+import logistics.order.presentation.dto.response.OrderListResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
-
-import static logistics.order.application.validator.CommonValidator.validateEqual;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +28,9 @@ public class OrderService {
     private final DeliveryServiceClient deliveryServiceClient;
     private final OrderValidator orderValidator;
     private final OrderTransactionService orderTransactionService;
+    private final ClientService clientService;
 
+    //주문생성
     public CreateOrderResponse create(CreateOrderRequest request) {
         //올바른 요청 및 상품 인지 검증
         orderValidator.validateOrder(request);
@@ -65,15 +67,33 @@ public class OrderService {
         );
     }
 
-    public GetOrderByIdResponse getOrderById(UUID orderId) {
-        OrderItem orderItem = orderTransactionService.findOrderItemWithOrder(orderId);
+    //주문ID로 주문 단건조회
+    public OrderDetailResponse getOrderById(UUID orderId) {
+        OrderItem orderItem = orderTransactionService.findWithOrder(orderId);
+        orderValidator.validateOrderOwner(orderItem.getOrder().getOrderUserId());
 
-        //MASTER는 모든 주문 조회 가능 / 그 외는 본인이 생성한 주문만 조회 가능
-        if (!AuthContext.isMaster()) {
-            validateEqual(orderItem.getOrder().getOrderUserId(), AuthContext.getUserId(), ErrorCode.C403_FORBIDDEN_ORDER);
-        }
+        return OrderDetailResponse.from(orderItem);
+    }
 
-        return GetOrderByIdResponse.from(orderItem);
+    //STATUS에 맞는 주문 목록조회, 만약 STATUS 비어 있으면 주문 전체조회
+    public OrderListResponse getOrdersByStatus(String status) {
+        orderValidator.validateOrderStatus(status);
+
+        //MASTER는 모든 주문, 그 외는 본인이 생성한 주문만
+        UUID orderUserId = AuthContext.isMaster() ? null : AuthContext.getUserId();
+
+        return new OrderListResponse(orderTransactionService.findAllWithOrder(orderUserId, status)
+                .stream().map(OrderDetailResponse::from)
+                .toList()
+        );
+    }
+
+    //주문ID로 주문취소
+    public CancelOrderResponse cancelOrderById(UUID orderId) {
+        Order order = orderTransactionService.cancel(orderId);
+        clientService.cancelDelivery(order.getDeliveryId(), orderId);
+
+        return CancelOrderResponse.from(order);
     }
 
     private OrderItem buildOrderItem(CreateOrderRequest request, FetchCompanyByIdResponse supplierCompany,

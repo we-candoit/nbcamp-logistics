@@ -6,8 +6,10 @@ import logistics.order.application.service.OrderService;
 import logistics.order.common.AuthHeaders;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.domain.enums.OrderStatus;
+import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
-import logistics.order.presentation.dto.response.GetOrderByIdResponse;
+import logistics.order.presentation.dto.response.OrderDetailResponse;
+import logistics.order.presentation.dto.response.OrderListResponse;
 import logistics.order.presentation.exception.CustomException;
 import logistics.order.presentation.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +30,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -344,10 +347,10 @@ class OrderControllerTest {
     @DisplayName("주문 단건 조회")
     class GetOrder {
 
-        private GetOrderByIdResponse response() {
-            return new GetOrderByIdResponse(orderId, deliveryId, userId, requesterId, OrderStatus.CONFIRMED,
+        private OrderDetailResponse response() {
+            return new OrderDetailResponse(orderId, deliveryId, userId, requesterId, OrderStatus.CONFIRMED,
                     "서울시 강남구", "문 앞에 놓아주세요",
-                    new GetOrderByIdResponse.Item(itemId, supplierId, "생수 2L", 15000L, 3L, 45000L),
+                    new OrderDetailResponse.Item(itemId, supplierId, "생수 2L", 15000L, 3L, 45000L),
                     LocalDateTime.of(2026, 10, 18, 12, 0));
         }
 
@@ -411,6 +414,151 @@ class OrderControllerTest {
                     .andExpect(status().isUnauthorized());
 
             verify(orderService, never()).getOrderById(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("주문 취소")
+    class CancelOrder {
+
+        private MockHttpServletRequestBuilder cancel(Object orderId) {
+            return post("/api/orders/{orderId}/cancel", orderId)
+                    .header(AuthHeaders.USER_ID, userId.toString())
+                    .header(AuthHeaders.ROLE, "MASTER");
+        }
+
+        @Test
+        public void 정상_요청이면_200과_취소된_주문정보를_반환한다() throws Exception {
+            //given
+            given(orderService.cancelOrderById(orderId))
+                    .willReturn(new CancelOrderResponse(orderId, deliveryId, OrderStatus.CANCELLED));
+
+            //when, then
+            mockMvc.perform(cancel(orderId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.orderId").value(orderId.toString()))
+                    .andExpect(jsonPath("$.deliveryId").value(deliveryId.toString()))
+                    .andExpect(jsonPath("$.status").value("CANCELLED"));
+        }
+
+        @Test
+        public void 배송이_취소되지_않으면_409를_반환한다() throws Exception {
+            //given
+            given(orderService.cancelOrderById(orderId))
+                    .willThrow(new CustomException(ErrorCode.C409_ORDER_NOT_CANCELABLE));
+
+            //when, then
+            mockMvc.perform(cancel(orderId))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.status").value(409));
+        }
+
+        @Test
+        public void 다른_사람의_주문이면_403을_반환한다() throws Exception {
+            //given
+            given(orderService.cancelOrderById(orderId))
+                    .willThrow(new CustomException(ErrorCode.C403_FORBIDDEN_ORDER));
+
+            //when, then
+            mockMvc.perform(cancel(orderId))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.status").value(403));
+        }
+
+        @Test
+        public void 없는_주문이면_404를_반환한다() throws Exception {
+            //given
+            given(orderService.cancelOrderById(orderId))
+                    .willThrow(new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+
+            //when, then
+            mockMvc.perform(cancel(orderId))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        public void 주문ID가_UUID_형식이_아니면_400을_반환하고_서비스를_호출하지_않는다() throws Exception {
+            //when, then
+            mockMvc.perform(cancel("abc"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("orderId: 형식이 올바르지 않습니다."));
+
+            verify(orderService, never()).cancelOrderById(any());
+        }
+
+        @Test
+        public void 인증_헤더가_없으면_401을_반환한다() throws Exception {
+            //when, then
+            mockMvc.perform(post("/api/orders/{orderId}/cancel", orderId))
+                    .andExpect(status().isUnauthorized());
+
+            verify(orderService, never()).cancelOrderById(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("주문 목록 조회")
+    class GetOrderByStatus {
+
+        private OrderListResponse response() {
+            return new OrderListResponse(List.of(new OrderDetailResponse(orderId, deliveryId, userId, requesterId,
+                    OrderStatus.CONFIRMED, "서울시 강남구", null,
+                    new OrderDetailResponse.Item(itemId, supplierId, "생수 2L", 15000L, 3L, 45000L),
+                    LocalDateTime.of(2026, 10, 19, 12, 0))));
+        }
+
+        @Test
+        public void 상태_없이_요청하면_200과_주문목록을_반환한다() throws Exception {
+            //given
+            given(orderService.getOrdersByStatus(null)).willReturn(response());
+
+            //when, then
+            mockMvc.perform(get("/api/orders")
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.orders.length()").value(1))
+                    .andExpect(jsonPath("$.orders[0].orderId").value(orderId.toString()))
+                    .andExpect(jsonPath("$.orders[0].status").value("CONFIRMED"))
+                    .andExpect(jsonPath("$.orders[0].item.itemId").value(itemId.toString()));
+        }
+
+        @Test
+        public void 상태를_지정하면_서비스에_그대로_전달한다() throws Exception {
+            //given
+            given(orderService.getOrdersByStatus("CONFIRMED")).willReturn(new OrderListResponse(List.of()));
+
+            //when, then
+            mockMvc.perform(get("/api/orders").param("status", "CONFIRMED")
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.orders").isEmpty());
+
+            verify(orderService).getOrdersByStatus("CONFIRMED");
+        }
+
+        @Test
+        public void 유효하지_않은_상태면_400을_반환한다() throws Exception {
+            //given
+            given(orderService.getOrdersByStatus("SHIPPING"))
+                    .willThrow(new CustomException(ErrorCode.C400_INVALID_ORDER_STATUS));
+
+            //when, then
+            mockMvc.perform(get("/api/orders").param("status", "SHIPPING")
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+
+        @Test
+        public void 인증_헤더가_없으면_401을_반환한다() throws Exception {
+            //when, then
+            mockMvc.perform(get("/api/orders"))
+                    .andExpect(status().isUnauthorized());
+
+            verify(orderService, never()).getOrdersByStatus(any());
         }
     }
 }

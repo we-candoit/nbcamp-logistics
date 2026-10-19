@@ -1,12 +1,14 @@
 package logistics.order.application.service;
 
 import jakarta.persistence.EntityManager;
+import logistics.order.application.validator.OrderValidator;
 import logistics.order.common.AuthHeaders;
 import logistics.order.config.AuditingConfig;
 import logistics.order.domain.entity.Order;
 import logistics.order.domain.entity.OrderItem;
 import logistics.order.domain.enums.OrderStatus;
 import logistics.order.infrastructure.AuditorAwareImpl;
+import logistics.order.infrastructure.client.UserServiceClient;
 import logistics.order.infrastructure.repository.OrderItemRepository;
 import logistics.order.infrastructure.repository.OrderRepository;
 import logistics.order.presentation.exception.CustomException;
@@ -24,15 +26,19 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 //H2 인메모리 DB로 JPA 계층만 띄워서 실제 저장 동작 확인
 @DataJpaTest(properties = "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect")
@@ -45,6 +51,12 @@ class OrderTransactionServiceTest {
         @Bean
         AuditorAwareImpl auditorAwareImpl() {
             return new AuditorAwareImpl();
+        }
+
+        //취소 시 권한/상태 검증은 실제 검증기로 확인 (유저서비스 호출은 사용하지 않음)
+        @Bean
+        OrderValidator orderValidator() {
+            return new OrderValidator(mock(UserServiceClient.class));
         }
     }
 
@@ -68,6 +80,8 @@ class OrderTransactionServiceTest {
         //AuditorAwareImpl이 요청 속성에서 userId를 읽으므로 요청 컨텍스트 세팅
         httpRequest = new MockHttpServletRequest();
         httpRequest.setAttribute(AuthHeaders.USER_ID, userId.toString());
+        //취소 시 권한 검증(AuthContext.isMaster)에 role이 필요 / 기본은 일반 유저
+        httpRequest.setAttribute(AuthHeaders.ROLE, "COMPANY_MANAGER");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(httpRequest));
     }
 
@@ -161,12 +175,8 @@ class OrderTransactionServiceTest {
             Object orderStatus = em.createNativeQuery("select order_status from p_order where id = :id")
                     .setParameter("id", order.getId())
                     .getSingleResult();
-            Object orderItemStatus = em.createNativeQuery("select order_item_status from p_order_item where order_id = :id")
-                    .setParameter("id", order.getId())
-                    .getSingleResult();
 
             assertThat(orderStatus).isEqualTo("CONFIRMED");
-            assertThat(orderItemStatus).isEqualTo("ORDERED");
         }
     }
 
@@ -218,8 +228,8 @@ class OrderTransactionServiceTest {
     }
 
     @Nested
-    @DisplayName("findOrderItemWithOrder()")
-    class FindOrderItemWithOrder {
+    @DisplayName("findWithOrder()")
+    class FindWithOrder {
 
         @Test
         public void 주문ID로_주문상품과_주문을_함께_조회한다() {
@@ -231,7 +241,7 @@ class OrderTransactionServiceTest {
             em.clear();
 
             //when
-            OrderItem found = orderTransactionService.findOrderItemWithOrder(order.getId());
+            OrderItem found = orderTransactionService.findWithOrder(order.getId());
 
             //then
             assertThat(found.getId()).isEqualTo(orderItem.getId());
@@ -243,7 +253,7 @@ class OrderTransactionServiceTest {
         @Test
         public void 없는_주문이면_C404_예외가_발생한다() {
             //when, then
-            assertThatThrownBy(() -> orderTransactionService.findOrderItemWithOrder(UUID.randomUUID()))
+            assertThatThrownBy(() -> orderTransactionService.findWithOrder(UUID.randomUUID()))
                     .isInstanceOf(CustomException.class)
                     .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
                             .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
@@ -259,10 +269,332 @@ class OrderTransactionServiceTest {
             em.clear();
 
             //when, then
-            assertThatThrownBy(() -> orderTransactionService.findOrderItemWithOrder(order.getId()))
+            assertThatThrownBy(() -> orderTransactionService.findWithOrder(order.getId()))
                     .isInstanceOf(CustomException.class)
                     .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
                             .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+    }
+
+    @Nested
+    @DisplayName("cancel()")
+    class Cancel {
+
+        @Test
+        public void 주문을_취소하면_DB에_CANCELLED로_반영된다() {
+            //given
+            Order order = confirmedOrder();
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+
+            //when
+            Order canceled = orderTransactionService.cancel(order.getId());
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(canceled.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+            assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus())
+                    .isEqualTo(OrderStatus.CANCELLED);
+        }
+
+        @Test
+        public void 취소해도_배송ID는_유지된다() {
+            //given
+            Order order = confirmedOrder();
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+
+            //when
+            orderTransactionService.cancel(order.getId());
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(orderRepository.findById(order.getId()).orElseThrow().getDeliveryId())
+                    .isEqualTo(order.getDeliveryId());
+        }
+
+        @Test
+        public void 없는_주문이면_C404_예외가_발생한다() {
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.cancel(UUID.randomUUID()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+
+        @Test
+        public void 삭제된_주문이면_C404_예외가_발생한다() {
+            //given
+            Order order = confirmedOrder();
+            orderTransactionService.save(order, orderItem(order));
+            order.softDelete(userId);
+            em.flush();
+            em.clear();
+
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.cancel(order.getId()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+
+        @Test
+        public void MASTER는_다른_사람의_주문도_취소한다() {
+            //given
+            httpRequest.setAttribute(AuthHeaders.ROLE, "MASTER");
+            Order order = new Order(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
+            order.confirm(UUID.randomUUID());
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+
+            //when
+            orderTransactionService.cancel(order.getId());
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus())
+                    .isEqualTo(OrderStatus.CANCELLED);
+        }
+
+        @Test
+        public void 다른_사람의_주문이면_C403_예외가_발생하고_상태는_그대로다() {
+            //given
+            Order order = new Order(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
+            order.confirm(UUID.randomUUID());
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.cancel(order.getId()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C403_FORBIDDEN_ORDER));
+            em.flush();
+            em.clear();
+            assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus())
+                    .isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @Test
+        public void 이미_취소된_주문이면_C409_예외가_발생한다() {
+            //given
+            Order order = confirmedOrder();
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+            orderTransactionService.cancel(order.getId());
+            em.flush();
+            em.clear();
+
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.cancel(order.getId()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C409_INVALID_ORDER_STATUS));
+        }
+    }
+
+    @Nested
+    @DisplayName("compensateCancelOrder()")
+    class CompensateCancelOrder {
+
+        @Test
+        public void 취소된_주문을_CONFIRMED로_복구한다() {
+            //given
+            Order order = confirmedOrder();
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+            orderTransactionService.cancel(order.getId());
+            em.flush();
+            em.clear();
+
+            //when
+            orderTransactionService.compensateCancelOrder(order.getId());
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus())
+                    .isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @Test
+        public void 없는_주문이면_C404_예외가_발생한다() {
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.compensateCancelOrder(UUID.randomUUID()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+    }
+
+    @Nested
+    @DisplayName("findAllWithOrder()")
+    class FindOrderItemsWithOrder {
+
+        private final UUID otherUserId = UUID.randomUUID();
+        private Order myConfirmed;
+        private Order myWaiting;
+        private Order otherConfirmed;
+
+        //내 주문(CONFIRMED, WAITING) + 다른 유저 주문(CONFIRMED) + 삭제된 주문
+        @BeforeEach
+        void setUpOrders() {
+            myConfirmed = orderOf(userId, true);
+            myWaiting = orderOf(userId, false);
+            otherConfirmed = orderOf(otherUserId, true);
+
+            Order deleted = orderOf(userId, true);
+            deleted.softDelete(userId);
+
+            em.flush();
+            em.clear();
+        }
+
+        //confirm 여부로 상태 결정 / WAITING은 deliveryId가 없어 DB 저장 불가 → 테스트에서만 세팅
+        private Order orderOf(UUID orderUserId, boolean confirmed) {
+            Order order = new Order(orderUserId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
+            order.confirm(UUID.randomUUID());
+            if (!confirmed) {
+                ReflectionTestUtils.setField(order, "orderStatus", OrderStatus.WAITING);
+            }
+            orderTransactionService.save(order, orderItem(order));
+            return order;
+        }
+
+        private List<UUID> orderIds(List<OrderItem> orderItems) {
+            return orderItems.stream().map(orderItem -> orderItem.getOrder().getId()).toList();
+        }
+
+        @Nested
+        @DisplayName("정렬")
+        class Sorting {
+
+            private Order myConfirmedLatest;
+
+            //생성시각이 거의 같아 순서가 불안정 → DB의 created_at을 날짜로 직접 지정
+            //myConfirmed(10/01) < myWaiting(10/02) < otherConfirmed(10/03) < myConfirmedLatest(10/04)
+            @BeforeEach
+            void setUpCreatedAt() {
+                myConfirmedLatest = orderOf(userId, true);
+                em.flush();
+
+                setCreatedAt(myConfirmed, LocalDateTime.of(2026, 10, 1, 12, 0));
+                setCreatedAt(myWaiting, LocalDateTime.of(2026, 10, 2, 12, 0));
+                setCreatedAt(otherConfirmed, LocalDateTime.of(2026, 10, 3, 12, 0));
+                setCreatedAt(myConfirmedLatest, LocalDateTime.of(2026, 10, 4, 12, 0));
+                em.clear();
+            }
+
+            //createdAt은 updatable = false라 엔티티로는 변경 불가 → native query로 변경
+            private void setCreatedAt(Order order, LocalDateTime createdAt) {
+                em.createNativeQuery("update p_order set created_at = :createdAt where id = :id")
+                        .setParameter("createdAt", createdAt)
+                        .setParameter("id", order.getId())
+                        .executeUpdate();
+            }
+
+            @Test
+            public void 전체_주문은_최신순으로_조회된다() {
+                //when
+                List<OrderItem> result = orderTransactionService.findAllWithOrder(null, null);
+
+                //then
+                assertThat(orderIds(result)).containsExactly(
+                        myConfirmedLatest.getId(), otherConfirmed.getId(), myWaiting.getId(), myConfirmed.getId());
+            }
+
+            @Test
+            public void 상태별_주문은_최신순으로_조회된다() {
+                //when
+                List<OrderItem> result = orderTransactionService.findAllWithOrder(null, "CONFIRMED");
+
+                //then
+                assertThat(orderIds(result)).containsExactly(
+                        myConfirmedLatest.getId(), otherConfirmed.getId(), myConfirmed.getId());
+            }
+
+            @Test
+            public void 유저별_주문은_최신순으로_조회된다() {
+                //when
+                List<OrderItem> result = orderTransactionService.findAllWithOrder(userId, null);
+
+                //then
+                assertThat(orderIds(result)).containsExactly(
+                        myConfirmedLatest.getId(), myWaiting.getId(), myConfirmed.getId());
+            }
+
+            @Test
+            public void 유저와_상태별_주문은_최신순으로_조회된다() {
+                //when
+                List<OrderItem> result = orderTransactionService.findAllWithOrder(userId, "CONFIRMED");
+
+                //then
+                assertThat(orderIds(result)).containsExactly(myConfirmedLatest.getId(), myConfirmed.getId());
+            }
+        }
+
+        @Test
+        public void 조건이_없으면_삭제되지_않은_전체_주문을_조회한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findAllWithOrder(null, null);
+
+            //then
+            assertThat(orderIds(result))
+                    .containsExactlyInAnyOrder(myConfirmed.getId(), myWaiting.getId(), otherConfirmed.getId());
+        }
+
+        @Test
+        public void 상태만_지정하면_해당_상태의_전체_주문을_조회한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findAllWithOrder(null, "CONFIRMED");
+
+            //then
+            assertThat(orderIds(result)).containsExactlyInAnyOrder(myConfirmed.getId(), otherConfirmed.getId());
+        }
+
+        @Test
+        public void 유저만_지정하면_해당_유저의_주문만_조회한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findAllWithOrder(userId, null);
+
+            //then
+            assertThat(orderIds(result)).containsExactlyInAnyOrder(myConfirmed.getId(), myWaiting.getId());
+        }
+
+        @Test
+        public void 유저와_상태를_지정하면_해당_유저의_해당_상태_주문만_조회한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findAllWithOrder(userId, "WAITING");
+
+            //then
+            assertThat(orderIds(result)).containsExactly(myWaiting.getId());
+        }
+
+        @Test
+        public void 조회된_주문상품의_주문은_fetch_join으로_함께_로딩된다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findAllWithOrder(null, null);
+
+            //then
+            assertThat(result).allMatch(orderItem -> Hibernate.isInitialized(orderItem.getOrder()));
+        }
+
+        @Test
+        public void 조건에_맞는_주문이_없으면_빈_목록을_반환한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findAllWithOrder(otherUserId, "WAITING");
+
+            //then
+            assertThat(result).isEmpty();
         }
     }
 
