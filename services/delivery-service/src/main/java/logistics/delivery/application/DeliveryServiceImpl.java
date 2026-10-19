@@ -11,13 +11,15 @@ import logistics.delivery.infrastructure.client.dto.HubRouteResponse;
 import logistics.delivery.infrastructure.client.dto.OrderDetailResponse;
 import logistics.delivery.infrastructure.repository.DeliveryRepository;
 import logistics.delivery.infrastructure.repository.DeliveryRouteRepository;
+import logistics.delivery.infrastructure.repository.DeliverySpecification;
 import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
-import logistics.delivery.presentation.dto.response.DeliveryCancelResponse;
-import logistics.delivery.presentation.dto.response.DeliveryCreateResponse;
-import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
-import logistics.delivery.presentation.dto.response.DeliveryRouteResponse;
+import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
+import logistics.delivery.presentation.dto.response.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.AuditorAware;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,54 @@ public class DeliveryServiceImpl implements DeliveryService{
     private final HubClient hubClient;
     private final OrderClient orderClient;
     private final AuditorAware<String> auditorAware;
+
+
+    /**
+     * 배송 목록 조회 및 검색
+     * @param request 검색 조건
+     * @param pageable 페이징 처리 정보
+     * @param userId 배송 조회 범위를 확인할 요청자의 사용자ID
+     * @param role 권한
+     * @return 검색 조건, 조회 권한을 만족하는 배송 목록을 페이징 처리해서 반환
+     */
+    @Override
+    public Page<DeliverySearchResponse> searchDeliveries(
+            DeliverySearchRequest request,
+            Pageable pageable,
+            UUID userId,
+            String role
+    ) {
+        if(!"MASTER".equals(role) && !"USER".equals(role)){
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "허용되지 않은 권한입니다,");
+        }
+
+        if(userId == null){
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "요청자 정보를 확인할 수 없습니다.");
+        }
+
+        Specification<Delivery> specification =
+                DeliverySpecification.isNotDeleted()
+                        .and(DeliverySpecification.hasStatus(request.status()))
+                        .and(DeliverySpecification.hasDepartureHubId(
+                                request.departureHubId()
+                        ))
+                        .and(DeliverySpecification.hasDestinationHubId(
+                                request.destinationHubId()
+                        ))
+                        // 검색 조건으로 입력한 담당자가 담당하는 배송으로 검색
+                        .and(DeliverySpecification.hasManagerId(request.managerId()))
+                        .and(DeliverySpecification.hasOrderId(request.orderId()));
+
+        // USER는 본인이 배송 또는 배송 경로 담당자인 배송만 조회
+        if ("USER".equals(role)) {
+            specification = specification.and(
+                    DeliverySpecification.hasManagerId(userId)
+            );
+        }
+
+        return deliveryRepository.findAll(specification, pageable)
+                .map(DeliverySearchResponse::from);
+    }
 
     /**
      * 배송 상세 조회

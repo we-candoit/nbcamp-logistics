@@ -2,10 +2,15 @@ package logistics.delivery.presentation.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import logistics.delivery.application.DeliveryService;
+import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
 import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
 import logistics.delivery.presentation.dto.response.DeliveryRouteResponse;
+import logistics.delivery.presentation.dto.response.DeliverySearchResponse;
 import logistics.delivery.presentation.interceptor.AuthInterceptor;
+import logistics.delivery.presentation.util.DeliveryPageableUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +26,24 @@ public class DeliveryApi implements DeliveryApiSpec{
 
 
     private final DeliveryService deliveryService;
+
+    @Override
+    @GetMapping
+    public ResponseEntity<Page<DeliverySearchResponse>> searchDeliveries(
+            DeliverySearchRequest searchRequest,
+            int page, int size, String sort,
+            HttpServletRequest request
+    ) {
+        UUID userId = AuthInterceptor.getUserId(request);
+        String role = (String) request.getAttribute(AuthInterceptor.ROLE_HEADER);
+
+        Pageable pageable = DeliveryPageableUtils.create(page, size, sort);
+
+        Page<DeliverySearchResponse> response =
+                deliveryService.searchDeliveries(searchRequest, pageable, userId, role);
+
+        return ResponseEntity.ok(response);
+    }
 
     @Override
     @GetMapping("/{id}")
