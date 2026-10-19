@@ -3,6 +3,9 @@ package logistics.company.presentation.exception;
 import feign.FeignException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -16,6 +19,9 @@ import java.util.List;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final String UK_COMPANY_MANAGER_ACTIVE = "uk_company_manager_active";
+    private static final String UK_COMPANY_ITEM_NAME_ACTIVE = "uk_company_item_name_active";
 
     // 업무 예외 처리: 리소스 없음(404), 권한 없음(403) 등
     @ExceptionHandler(BusinessException.class)
@@ -67,11 +73,51 @@ public class GlobalExceptionHandler {
         return toResponse(ErrorCode.BAD_REQUEST, request, errors);
     }
 
+    // 외부 서비스 404: 요청한 데이터가 상대 서비스에 없음 (허브·사용자 등)
+    @ExceptionHandler(FeignException.NotFound.class)
+    public ResponseEntity<ErrorResponse> handleFeignNotFound(FeignException.NotFound e, HttpServletRequest request) {
+        log.warn("External resource not found: url={}", e.request().url());
+        return toResponse(ErrorCode.NOT_FOUND, request);
+    }
+
     // 외부 호출 실패: Feign 호출 오류, 타임아웃
     @ExceptionHandler(FeignException.class)
     public ResponseEntity<ErrorResponse> handleFeignException(FeignException e, HttpServletRequest request) {
         log.error("External service call failed: status={}, message={}", e.status(), e.getMessage());
         return toResponse(ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE, request);
+    }
+
+    // 동시 요청으로 인한 인덱스 위반
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException e,
+            HttpServletRequest request
+    ) {
+        // company: 담당자 1인 1업체 인덱스 위반 → 409
+        if (isConstraintViolation(e, UK_COMPANY_MANAGER_ACTIVE)) {
+            return handleBusinessException(
+                    new BusinessException(ErrorCode.MANAGER_ALREADY_ASSIGNED), request);
+        }
+        // item: 같은 업체 내 상품명 중복 인덱스 위반 → 409
+        if (isConstraintViolation(e, UK_COMPANY_ITEM_NAME_ACTIVE)) {
+            return handleBusinessException(
+                    new BusinessException(ErrorCode.ITEM_NAME_ALREADY_EXISTS), request);
+        }
+        // 그 외 무결성 위반 → 500
+        return toResponse(ErrorCode.INTERNAL_SERVER_ERROR, request);
+    }
+
+    // 정렬 실패: 존재하지 않는 정렬 필드 (?sort=abc)
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ErrorResponse> handlePropertyReference(PropertyReferenceException e, HttpServletRequest request) {
+        List<ErrorResponse.FieldError> errors =
+                List.of(new ErrorResponse.FieldError("sort", "정렬할 수 없는 필드입니다: " + e.getPropertyName()));
+        return toResponse(ErrorCode.BAD_REQUEST, request, errors);
+    }
+
+    private boolean isConstraintViolation(DataIntegrityViolationException e, String constraintName) {
+        return e.getCause() instanceof ConstraintViolationException cve
+                && constraintName.equalsIgnoreCase(cve.getConstraintName());
     }
 
     private ResponseEntity<ErrorResponse> toResponse(ErrorCode errorCode, HttpServletRequest request) {

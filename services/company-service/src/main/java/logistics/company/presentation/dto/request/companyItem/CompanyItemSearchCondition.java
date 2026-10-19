@@ -1,5 +1,6 @@
 package logistics.company.presentation.dto.request.companyItem;
 
+import jakarta.validation.constraints.Min;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -20,4 +21,15 @@ public class CompanyItemSearchCondition {
     private String companyName;                 // 업체명 (부분 일치)
 
     private String description;                 // 상품 설명 (부분 일치)
+
+    @Min(value = 0, message = "상품 가격은 0 이상이어야 조회 가능합니다.")
+    private Long minPrice;                       // 최소 가격
+
+    @Min(value = 0, message = "상품 가격은 0 이상이어야 조회 가능합니다.")
+    private Long maxPrice;                       // 최대 가격
+
+    // 최소 가격이 최대 가격보다 크면 잘못된 범위
+    public boolean invalidPriceRange() {
+        return minPrice != null && maxPrice != null && minPrice > maxPrice;
+    }
 }
