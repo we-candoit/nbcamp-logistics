@@ -1,6 +1,7 @@
 package logistics.hub.infrastructure.init;
 
 import logistics.hub.application.service.HaversineCalculator;
+import logistics.hub.common.TemporaryUserIds;
 import logistics.hub.domain.entity.Hub;
 import logistics.hub.domain.entity.HubRoute;
 import logistics.hub.infrastructure.repository.HubRepository;
@@ -71,7 +72,7 @@ public class HubRouteDataInitializer implements CommandLineRunner {
                                 destination,
                                 distance,
                                 duration,
-                                "MASTER"
+                                TemporaryUserIds.LOCAL_MASTER_ID
                         )
                 );
 

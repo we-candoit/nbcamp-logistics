@@ -49,7 +49,7 @@ public class HubRoute extends BaseEntity {
             Hub destinationHub,
             BigDecimal distance,
             Integer duration,
-            String createdBy
+            UUID createdBy
     ) {
         super(createdBy);
 

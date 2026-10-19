@@ -1,11 +1,6 @@
 package logistics.hub.domain.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import logistics.hub.common.entity.BaseEntity;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -43,7 +38,7 @@ public class Hub extends BaseEntity {
             String address,
             double latitude,
             double longitude,
-            String createdBy
+            UUID createdBy
     ) {
         super(createdBy);
 
