@@ -92,7 +92,7 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         // 담당자 1인 1업체 인덱스 위반 → 409
-        if (isConstraintViolation(e)) {
+        if (isConstraintViolation(e, UK_COMPANY_MANAGER_ACTIVE)) {
             return handleBusinessException(
                     new BusinessException(ErrorCode.MANAGER_ALREADY_ASSIGNED), request);
         }
@@ -100,8 +100,9 @@ public class GlobalExceptionHandler {
         return toResponse(ErrorCode.INTERNAL_SERVER_ERROR, request);
     }
 
-    private boolean isConstraintViolation(DataIntegrityViolationException e) {
-        return true; // TODO
+    private boolean isConstraintViolation(DataIntegrityViolationException e, String constraintName) {
+        return e.getCause() instanceof ConstraintViolationException cve
+                && constraintName.equalsIgnoreCase(cve.getConstraintName());
     }
 
     private ResponseEntity<ErrorResponse> toResponse(ErrorCode errorCode, HttpServletRequest request) {
