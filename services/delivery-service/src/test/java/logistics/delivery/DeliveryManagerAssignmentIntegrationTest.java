@@ -103,7 +103,7 @@ class DeliveryManagerAssignmentIntegrationTest {
                 (id, order_id, departure_hub_id, destination_hub_id, status,
                  address, recipient_name, recipient_phone, created_at, updated_at, created_by, updated_by)
                 VALUES (?, ?, ?, ?, 'WAITING', 'test address', 'recipient', '010-0000-0000',
-                        TIMESTAMP '2026-01-01 09:00:00', TIMESTAMP '2026-01-01 09:00:00', 'fixture', 'fixture')
+                        TIMESTAMP '2026-01-01 09:00:00', TIMESTAMP '2026-01-01 09:00:00', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001')
                 """, deliveryId, UUID.randomUUID(), originHubId, destinationHubId);
         insertRoute(hubRouteId, 1, originHubId, destinationHubId, "HUB_TO_HUB");
         insertRoute(companyRouteId, 2, destinationHubId, null, "HUB_TO_COMPANY");
@@ -265,8 +265,8 @@ class DeliveryManagerAssignmentIntegrationTest {
         switch (scenario) {
             case "missingDelivery" -> requestedDelivery = UUID.randomUUID();
             case "missingRoute" -> requestedRoute = UUID.randomUUID();
-            case "deletedDelivery" -> jdbc.update("UPDATE p_deliveries SET deleted_at = CURRENT_TIMESTAMP, deleted_by = 'fixture' WHERE id = ?", deliveryId);
-            case "deletedRoute" -> jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = 'fixture' WHERE id = ?", companyRouteId);
+            case "deletedDelivery" -> jdbc.update("UPDATE p_deliveries SET deleted_at = CURRENT_TIMESTAMP, deleted_by = '00000000-0000-4000-8000-000000000001' WHERE id = ?", deliveryId);
+            case "deletedRoute" -> jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = '00000000-0000-4000-8000-000000000001' WHERE id = ?", companyRouteId);
             case "foreignRoute" -> {
                 UUID otherDelivery = UUID.randomUUID();
                 jdbc.update("""
@@ -274,7 +274,7 @@ class DeliveryManagerAssignmentIntegrationTest {
                         (id, order_id, departure_hub_id, destination_hub_id, status, address,
                          recipient_name, recipient_phone, created_at, updated_at, created_by, updated_by)
                         VALUES (?, ?, ?, ?, 'WAITING', 'other', 'other', '010-0000-0000',
-                                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'fixture', 'fixture')
+                                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001')
                         """, otherDelivery, UUID.randomUUID(), originHubId, destinationHubId);
                 jdbc.update("UPDATE p_delivery_routes SET delivery_id = ? WHERE id = ?", otherDelivery, companyRouteId);
             }
@@ -365,7 +365,7 @@ class DeliveryManagerAssignmentIntegrationTest {
     @ParameterizedTest
     @CsvSource(value = {
             "NULL|master|MASTER|401", "BLANK|master|MASTER|401", "invalid|master|MASTER|400",
-            "VALID|NULL|MASTER|401", "VALID|BLANK|MASTER|401", "VALID|master|NULL|401",
+            "VALID|master|NULL|401",
             "VALID|master|BLANK|401", "VALID|master|USER|403", "VALID|master|ADMIN|403"
     }, delimiter = '|')
     @DisplayName("요청자 헤더와 MASTER 권한을 검증하고 사용자 API를 호출하지 않는다")
@@ -396,7 +396,7 @@ class DeliveryManagerAssignmentIntegrationTest {
                 (id, delivery_id, sequence, departure_hub_id, destination_hub_id, type, status,
                  created_at, updated_at, created_by, updated_by)
                 VALUES (?, ?, ?, ?, ?, ?, 'WAITING', TIMESTAMP '2026-01-01 09:00:00',
-                        TIMESTAMP '2026-01-01 09:00:00', 'fixture', 'fixture')
+                        TIMESTAMP '2026-01-01 09:00:00', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001')
                 """, id, deliveryId, sequence, departure, destination, type);
     }
 
@@ -422,8 +422,8 @@ class DeliveryManagerAssignmentIntegrationTest {
 
     private void assertAssignedAudit(Map<String, Object> row) {
         assertThat(row.get("manager_id")).isEqualTo(managerId);
-        assertThat(row.get("updated_by")).isEqualTo("master");
-        assertThat(row.get("created_by")).isEqualTo("fixture");
+        assertThat(row.get("updated_by")).isEqualTo(requesterId);
+        assertThat(row.get("created_by")).isEqualTo(UUID.fromString("00000000-0000-4000-8000-000000000001"));
         assertThat(row.get("created_at").toString()).startsWith("2026-01-01 09:00:00");
         assertThat(row.get("updated_at")).isNotEqualTo(row.get("created_at"));
     }
@@ -451,7 +451,6 @@ class DeliveryManagerAssignmentIntegrationTest {
                 .header("Content-Type", "application/json")
                 .PUT(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
         addHeader(request, "X-User-Id", requester);
-        addHeader(request, "X-User-Name", username);
         addHeader(request, "X-Role-Name", role);
         return client.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     }

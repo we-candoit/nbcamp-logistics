@@ -261,7 +261,7 @@ class DeliveryDeletionIntegrationTest {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + path))
                 .timeout(Duration.ofSeconds(10))
-                .header("X-User-Name", username)
+                .header("X-User-Id", UUID.nameUUIDFromBytes(username.getBytes(StandardCharsets.UTF_8)).toString())
                 .header("X-Role-Name", role);
         if (body == null) {
             builder.method(method, HttpRequest.BodyPublishers.noBody());
@@ -285,7 +285,7 @@ class DeliveryDeletionIntegrationTest {
                                    Object expectedDeletedAt, String expectedDeletedBy) {
         assertThat(after.get("STATUS")).isEqualTo("CANCELLED");
         assertThat(after.get("DELETED_AT")).isEqualTo(expectedDeletedAt);
-        assertThat(after.get("DELETED_BY")).isEqualTo(expectedDeletedBy);
+        assertThat(after.get("DELETED_BY")).isEqualTo(UUID.nameUUIDFromBytes(expectedDeletedBy.getBytes(StandardCharsets.UTF_8)));
         assertThat(after.get("ID")).isEqualTo(before.get("ID"));
         assertThat(after.get("CREATED_BY")).isEqualTo(before.get("CREATED_BY"));
         assertThat(after.get("CREATED_AT")).isEqualTo(before.get("CREATED_AT"));

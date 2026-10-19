@@ -14,7 +14,7 @@ public interface UserClient {
     @GetMapping("/api/users/{id}")
     UserDetailResponse getUserDetail(
             @PathVariable("id") UUID userId,                // 배정할 배송 담당자id
-            @RequestHeader("X-USER-ID") UUID requesterId,    // 배정을 요청한 MASTER의 id
-            @RequestHeader("X-ROLE-NAME") String role
+            @RequestHeader("X-User-Id") UUID requesterId,    // 배정을 요청한 MASTER의 id
+            @RequestHeader("X-Role-Name") String role
     );
 }

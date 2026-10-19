@@ -28,27 +28,27 @@ public abstract class BaseEntity {
     private LocalDateTime createdAt;
 
     @CreatedBy
-    @Column(nullable = false, updatable = false, length = 100)
-    private String createdBy;
+    @Column(nullable = false, updatable = false)
+    private UUID createdBy;
 
     @LastModifiedDate
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
     @LastModifiedBy
-    @Column(nullable = false, length = 100)
-    private String updatedBy;
+    @Column(nullable = false)
+    private UUID updatedBy;
 
     @Column
     private LocalDateTime deletedAt;
 
-    @Column(length = 100)
-    private String deletedBy;
+    @Column
+    private UUID deletedBy;
 
-    public void delete(String username, LocalDateTime deletedAt){
+    public void delete(UUID userId, LocalDateTime deletedAt){
         if(this.deletedAt != null) return;
 
-        this.deletedBy = username;
+        this.deletedBy = userId;
         this.deletedAt = deletedAt;
     }
 

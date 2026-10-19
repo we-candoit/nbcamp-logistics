@@ -2,6 +2,7 @@ package logistics.delivery.presentation.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -18,6 +19,10 @@ import java.util.UUID;
 
 public interface DeliveryInternalApiSpec {
 
+    @Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true,
+            description = "원 요청자의 사용자 ID", schema = @Schema(type = "string", format = "uuid"))
+    @Parameter(name = "X-Role-Name", in = ParameterIn.HEADER, required = true,
+            description = "원 요청자의 역할")
     @Operation(
             summary = "배송 생성",
             description = """
@@ -57,7 +62,7 @@ public interface DeliveryInternalApiSpec {
             ),
             @ApiResponse(
                     responseCode = "401",
-                    description = "내부 서비스 인증 실패",
+                    description = "사용자 ID 또는 역할 헤더 누락, 공백",
                     content = @Content
             ),
             @ApiResponse(
@@ -75,6 +80,10 @@ public interface DeliveryInternalApiSpec {
             @Valid @RequestBody DeliveryCreateRequest request
     );
 
+    @Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true,
+            description = "원 요청자의 사용자 ID", schema = @Schema(type = "string", format = "uuid"))
+    @Parameter(name = "X-Role-Name", in = ParameterIn.HEADER, required = true,
+            description = "원 요청자의 역할")
     @Operation(
             summary = "배송 취소",
             description = """
@@ -101,7 +110,7 @@ public interface DeliveryInternalApiSpec {
             ),
             @ApiResponse(
                     responseCode = "401",
-                    description = "사용자 또는 역할 헤더 누락, 공백",
+                    description = "사용자 ID 또는 역할 헤더 누락, 공백",
                     content = @Content
             ),
             @ApiResponse(
@@ -120,6 +129,10 @@ public interface DeliveryInternalApiSpec {
             @PathVariable("id") UUID deliveryId
     );
 
+    @Parameter(name = "X-User-Id", in = ParameterIn.HEADER, required = true,
+            description = "원 요청자의 사용자 ID", schema = @Schema(type = "string", format = "uuid"))
+    @Parameter(name = "X-Role-Name", in = ParameterIn.HEADER, required = true,
+            description = "원 요청자의 역할")
     @Operation(
             summary = "배송 삭제",
             description = """
@@ -142,7 +155,7 @@ public interface DeliveryInternalApiSpec {
             ),
             @ApiResponse(
                     responseCode = "401",
-                    description = "사용자 또는 역할 헤더 누락, 공백",
+                    description = "사용자 ID 또는 역할 헤더 누락, 공백",
                     content = @Content
             ),
             @ApiResponse(

@@ -229,7 +229,7 @@ class DeliveryStatusTransitionIntegrationTest {
     void previousRouteMustExistAndBeActive(String scenario) throws Exception {
         setStates("HUB_ARRIVED", "ARRIVED", "WAITING");
         if ("deleted".equals(scenario)) {
-            jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = 'fixture' WHERE id = ?", hubRouteId);
+            jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = '00000000-0000-4000-8000-000000000001' WHERE id = ?", hubRouteId);
         } else {
             jdbc.update("DELETE FROM p_delivery_routes WHERE id = ?", hubRouteId);
         }
@@ -315,8 +315,8 @@ class DeliveryStatusTransitionIntegrationTest {
         switch (scenario) {
             case "missingDelivery" -> requestedDelivery = UUID.randomUUID();
             case "missingRoute" -> requestedRoute = UUID.randomUUID();
-            case "deletedDelivery" -> jdbc.update("UPDATE p_deliveries SET deleted_at = CURRENT_TIMESTAMP, deleted_by = 'fixture' WHERE id = ?", deliveryId);
-            case "deletedRoute" -> jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = 'fixture' WHERE id = ?", hubRouteId);
+            case "deletedDelivery" -> jdbc.update("UPDATE p_deliveries SET deleted_at = CURRENT_TIMESTAMP, deleted_by = '00000000-0000-4000-8000-000000000001' WHERE id = ?", deliveryId);
+            case "deletedRoute" -> jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = '00000000-0000-4000-8000-000000000001' WHERE id = ?", hubRouteId);
             case "foreignRoute" -> {
                 UUID otherDelivery = UUID.randomUUID();
                 insertDelivery(otherDelivery, originHubId, destinationHubId);
@@ -355,7 +355,7 @@ class DeliveryStatusTransitionIntegrationTest {
     @ParameterizedTest
     @CsvSource(value = {
             "NULL|master|MASTER|401", "BLANK|master|MASTER|401", "invalid|master|MASTER|400",
-            "VALID|NULL|MASTER|401", "VALID|BLANK|MASTER|401", "VALID|master|NULL|401",
+            "VALID|master|NULL|401",
             "VALID|master|BLANK|401", "VALID|master|ADMIN|403"
     }, delimiter = '|')
     @DisplayName("필수 헤더·요청자 UUID·허용 역할을 검증한다")
@@ -373,7 +373,7 @@ class DeliveryStatusTransitionIntegrationTest {
                 (id, order_id, manager_id, departure_hub_id, destination_hub_id, status,
                  address, recipient_name, recipient_phone, created_at, updated_at, created_by, updated_by)
                 VALUES (?, ?, ?, ?, ?, 'WAITING', 'test address', 'recipient', '010-0000-0000',
-                        TIMESTAMP '2026-01-01 09:00:00', TIMESTAMP '2026-01-01 09:00:00', 'fixture', 'fixture')
+                        TIMESTAMP '2026-01-01 09:00:00', TIMESTAMP '2026-01-01 09:00:00', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001')
                 """, id, UUID.randomUUID(), companyManagerId, departure, destination);
     }
 
@@ -383,7 +383,7 @@ class DeliveryStatusTransitionIntegrationTest {
                 (id, delivery_id, sequence, manager_id, departure_hub_id, destination_hub_id, type, status,
                  created_at, updated_at, created_by, updated_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 'WAITING', TIMESTAMP '2026-01-01 09:00:00',
-                        TIMESTAMP '2026-01-01 09:00:00', 'fixture', 'fixture')
+                        TIMESTAMP '2026-01-01 09:00:00', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001')
                 """, id, deliveryId, sequence, manager, departure, destination, type);
     }
 
@@ -407,8 +407,13 @@ class DeliveryStatusTransitionIntegrationTest {
     }
 
     private void assertUpdatedAudit(Map<String, Object> row, String username) {
-        assertThat(row.get("created_by")).isEqualTo("fixture");
-        assertThat(row.get("updated_by")).isEqualTo(username);
+        assertThat(row.get("created_by")).isEqualTo(UUID.fromString("00000000-0000-4000-8000-000000000001"));
+        assertThat(row.get("updated_by")).isEqualTo(switch (username) {
+            case "hubmanager" -> hubManagerId;
+            case "companymanager" -> companyManagerId;
+            case "master" -> masterId;
+            default -> throw new IllegalArgumentException(username);
+        });
         assertThat(row.get("created_at").toString()).startsWith("2026-01-01 09:00:00");
         assertThat(row.get("updated_at")).isNotEqualTo(row.get("created_at"));
     }
@@ -443,7 +448,6 @@ class DeliveryStatusTransitionIntegrationTest {
                 .header("Content-Type", "application/json")
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
         addHeader(request, "X-User-Id", requester);
-        addHeader(request, "X-User-Name", username);
         addHeader(request, "X-Role-Name", role);
         return client.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     }
