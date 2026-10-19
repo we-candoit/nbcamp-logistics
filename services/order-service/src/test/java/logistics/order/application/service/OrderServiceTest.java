@@ -2,22 +2,24 @@ package logistics.order.application.service;
 
 import feign.FeignException;
 import feign.Request;
+import feign.RetryableException;
 import logistics.order.application.validator.OrderValidator;
 import logistics.order.common.AuthHeaders;
 import logistics.order.domain.entity.Order;
 import logistics.order.domain.entity.OrderItem;
-import logistics.order.domain.enums.OrderItemStatus;
 import logistics.order.domain.enums.OrderStatus;
 import logistics.order.infrastructure.client.CompanyServiceClient;
 import logistics.order.infrastructure.client.DeliveryServiceClient;
 import logistics.order.infrastructure.client.HubServiceClient;
 import logistics.order.infrastructure.client.UserServiceClient;
+import logistics.order.infrastructure.client.dto.CancelDeliveryResponse;
 import logistics.order.infrastructure.client.dto.CreateDeliveryRequest;
 import logistics.order.infrastructure.client.dto.CreateDeliveryResponse;
 import logistics.order.infrastructure.client.dto.FetchCompanyByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
+import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
 import logistics.order.presentation.dto.response.OrderDetailResponse;
 import logistics.order.presentation.dto.response.OrderListResponse;
@@ -63,8 +65,11 @@ class OrderServiceTest {
     //검증 로직은 실제 객체 사용 (목데이터로 실제 검증 흐름까지 확인)
     private final OrderValidator orderValidator = new OrderValidator(userServiceClient);
 
+    private final ClientService clientService = new ClientService(deliveryServiceClient, orderTransactionService, orderValidator);
+
     private final OrderService orderService = new OrderService(
-            companyServiceClient, hubServiceClient, deliveryServiceClient, orderValidator, orderTransactionService);
+            companyServiceClient, hubServiceClient, deliveryServiceClient, orderValidator, orderTransactionService,
+            clientService);
 
     //===== 목데이터 =====
     private final UUID userId = UUID.randomUUID();
@@ -243,7 +248,6 @@ class OrderServiceTest {
 
             //주문상품
             assertThat(orderItem.getOrder()).isSameAs(order);
-            assertThat(orderItem.getOrderItemStatus()).isEqualTo(OrderItemStatus.ORDERED);
             assertThat(orderItem.getItemId()).isEqualTo(itemId);
             assertThat(orderItem.getItemName()).isEqualTo("생수 2L");
             assertThat(orderItem.getPrice()).isEqualTo(price);
@@ -375,7 +379,7 @@ class OrderServiceTest {
             loginAs("COMPANY_MANAGER");
             OrderItem orderItem = savedOrderItem(userId);
             UUID orderId = orderItem.getOrder().getId();
-            given(orderTransactionService.findOrderItemWithOrder(orderId)).willReturn(orderItem);
+            given(orderTransactionService.findWithOrder(orderId)).willReturn(orderItem);
 
             //when
             OrderDetailResponse response = orderService.getOrderById(orderId);
@@ -403,7 +407,7 @@ class OrderServiceTest {
             loginAs("MASTER");
             OrderItem orderItem = savedOrderItem(UUID.randomUUID());
             UUID orderId = orderItem.getOrder().getId();
-            given(orderTransactionService.findOrderItemWithOrder(orderId)).willReturn(orderItem);
+            given(orderTransactionService.findWithOrder(orderId)).willReturn(orderItem);
 
             //when, then
             assertThat(orderService.getOrderById(orderId).getOrderId()).isEqualTo(orderId);
@@ -415,7 +419,7 @@ class OrderServiceTest {
             loginAs("COMPANY_MANAGER");
             OrderItem orderItem = savedOrderItem(UUID.randomUUID());
             UUID orderId = orderItem.getOrder().getId();
-            given(orderTransactionService.findOrderItemWithOrder(orderId)).willReturn(orderItem);
+            given(orderTransactionService.findWithOrder(orderId)).willReturn(orderItem);
 
             //when, then
             assertThatThrownBy(() -> orderService.getOrderById(orderId))
@@ -427,12 +431,220 @@ class OrderServiceTest {
             //given
             loginAs("MASTER");
             UUID orderId = UUID.randomUUID();
-            given(orderTransactionService.findOrderItemWithOrder(orderId))
+            given(orderTransactionService.findWithOrder(orderId))
                     .willThrow(new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
 
             //when, then
             assertThatThrownBy(() -> orderService.getOrderById(orderId))
                     .satisfies(e -> assertErrorCode(e, ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+    }
+
+    @Nested
+    @DisplayName("cancelOrderById()")
+    class CancelOrderById {
+
+        private final Request request = Request.create(Request.HttpMethod.POST, "http://delivery-service",
+                Map.of(), null, StandardCharsets.UTF_8, null);
+
+        //주문취소(검증 포함) → 배송취소 성공까지 정상 동작하는 상황
+        private Order givenCancelableOrder() {
+            Order order = new Order(userId, requesterId, requesterHubId, "서울시 강남구 테헤란로 1", null);
+            order.confirm(deliveryId);
+            given(orderTransactionService.cancel(order.getId())).willAnswer(invocation -> order.cancel());
+            given(deliveryServiceClient.cancelDelivery(deliveryId))
+                    .willReturn(new CancelDeliveryResponse(deliveryId, "CANCELLED"));
+            return order;
+        }
+
+        @Nested
+        @DisplayName("정상 케이스")
+        class Success {
+
+            @Test
+            public void 주문을_취소하면_배송취소_후_취소된_주문정보를_반환한다() {
+                //given
+                loginAs("COMPANY_MANAGER");
+                Order order = givenCancelableOrder();
+
+                //when
+                CancelOrderResponse response = orderService.cancelOrderById(order.getId());
+
+                //then
+                assertThat(response.getOrderId()).isEqualTo(order.getId());
+                assertThat(response.getDeliveryId()).isEqualTo(deliveryId);
+                assertThat(response.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+                verify(deliveryServiceClient).cancelDelivery(deliveryId);
+            }
+
+            @Test
+            public void 주문을_먼저_취소한_뒤_배송취소를_요청한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                InOrder inOrder = inOrder(orderTransactionService, deliveryServiceClient);
+
+                //when
+                orderService.cancelOrderById(order.getId());
+
+                //then
+                inOrder.verify(orderTransactionService).cancel(order.getId());
+                inOrder.verify(deliveryServiceClient).cancelDelivery(deliveryId);
+            }
+
+            @Test
+            public void 배송취소에_성공하면_보상처리를_하지_않는다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+
+                //when
+                orderService.cancelOrderById(order.getId());
+
+                //then
+                verify(orderTransactionService, never()).compensateCancelOrder(any());
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스 - 주문취소 단계")
+        class CancelFailure {
+
+            //주문취소(조회/권한/상태 검증) 단계에서 실패하면 배송취소와 보상처리 모두 하지 않음
+            private void assertNoDeliveryCallAndNoCompensation() {
+                verifyNoInteractions(deliveryServiceClient);
+                verify(orderTransactionService, never()).compensateCancelOrder(any());
+            }
+
+            @Test
+            public void 없는_주문이면_C404_예외가_전달된다() {
+                //given
+                loginAs("MASTER");
+                UUID orderId = UUID.randomUUID();
+                given(orderTransactionService.cancel(orderId))
+                        .willThrow(new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(orderId))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C404_ORDER_NOT_FOUND));
+                assertNoDeliveryCallAndNoCompensation();
+            }
+
+            @Test
+            public void 다른_사람의_주문이면_C403_예외가_전달된다() {
+                //given
+                loginAs("COMPANY_MANAGER");
+                UUID orderId = UUID.randomUUID();
+                given(orderTransactionService.cancel(orderId))
+                        .willThrow(new CustomException(ErrorCode.C403_FORBIDDEN_ORDER));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(orderId))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_ORDER));
+                assertNoDeliveryCallAndNoCompensation();
+            }
+
+            @Test
+            public void 취소할_수_없는_상태면_C409_예외가_전달된다() {
+                //given
+                loginAs("MASTER");
+                UUID orderId = UUID.randomUUID();
+                given(orderTransactionService.cancel(orderId))
+                        .willThrow(new CustomException(ErrorCode.C409_INVALID_ORDER_STATUS));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(orderId))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_INVALID_ORDER_STATUS));
+                assertNoDeliveryCallAndNoCompensation();
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스 - 배송취소 단계 (보상처리)")
+        class DeliveryFailure {
+
+            @Test
+            public void 배송이_이미_출발해_409로_응답하면_취소불가_예외가_발생하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                given(deliveryServiceClient.cancelDelivery(deliveryId))
+                        .willThrow(new FeignException.Conflict("출발 전 배송만 취소할 수 있습니다.", request, null, null));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
+                verify(orderTransactionService).compensateCancelOrder(order.getId());
+            }
+
+            @Test
+            public void 배송이_없어_404로_응답하면_취소불가_예외가_발생하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                given(deliveryServiceClient.cancelDelivery(deliveryId))
+                        .willThrow(new FeignException.NotFound("해당 배송을 찾을 수 없습니다.", request, null, null));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
+                verify(orderTransactionService).compensateCancelOrder(order.getId());
+            }
+
+            @Test
+            public void 배송취소_응답상태가_CANCELLED가_아니면_취소불가_예외가_발생하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                given(deliveryServiceClient.cancelDelivery(deliveryId))
+                        .willReturn(new CancelDeliveryResponse(deliveryId, "HUB_IN_TRANSIT"));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
+                verify(orderTransactionService).compensateCancelOrder(order.getId());
+            }
+
+            @Test
+            public void 배송서비스가_5xx로_응답하면_FeignException을_그대로_전달하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                given(deliveryServiceClient.cancelDelivery(deliveryId)).willThrow(feignException());
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
+                        .isInstanceOf(FeignException.InternalServerError.class);
+                verify(orderTransactionService).compensateCancelOrder(order.getId());
+            }
+
+            @Test
+            public void 배송서비스가_응답하지_않으면_FeignException을_그대로_전달하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                given(deliveryServiceClient.cancelDelivery(deliveryId))
+                        .willThrow(new RetryableException(-1, "Read timed out", Request.HttpMethod.POST, (Long) null, request));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
+                        .isInstanceOf(RetryableException.class);
+                verify(orderTransactionService).compensateCancelOrder(order.getId());
+            }
+
+            @Test
+            public void 그_외_예외가_발생해도_예외를_그대로_전달하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                given(deliveryServiceClient.cancelDelivery(deliveryId))
+                        .willThrow(new IllegalStateException("circuit open"));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
+                        .isInstanceOf(IllegalStateException.class);
+                verify(orderTransactionService).compensateCancelOrder(order.getId());
+            }
         }
     }
 
@@ -455,7 +667,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 OrderItem orderItem = confirmedOrderItem();
-                given(orderTransactionService.findOrderItemsWithOrder(null, null)).willReturn(List.of(orderItem));
+                given(orderTransactionService.findAllWithOrder(null, null)).willReturn(List.of(orderItem));
 
                 //when
                 OrderListResponse response = orderService.getOrdersByStatus(null);
@@ -463,66 +675,53 @@ class OrderServiceTest {
                 //then
                 assertThat(response.getOrders()).hasSize(1);
                 assertThat(response.getOrders().getFirst().getOrderId()).isEqualTo(orderItem.getOrder().getId());
-                verify(orderTransactionService).findOrderItemsWithOrder(null, null);
+                verify(orderTransactionService).findAllWithOrder(null, null);
             }
 
             @Test
             public void MASTER가_상태를_지정하면_해당_상태로_조회한다() {
                 //given
                 loginAs("MASTER");
-                given(orderTransactionService.findOrderItemsWithOrder(null, OrderStatus.CONFIRMED)).willReturn(List.of());
+                given(orderTransactionService.findAllWithOrder(null, "CONFIRMED")).willReturn(List.of());
 
                 //when
                 orderService.getOrdersByStatus("CONFIRMED");
 
                 //then
-                verify(orderTransactionService).findOrderItemsWithOrder(null, OrderStatus.CONFIRMED);
+                verify(orderTransactionService).findAllWithOrder(null, "CONFIRMED");
             }
 
             @Test
             public void 일반_유저는_본인_주문만_조회한다() {
                 //given
                 loginAs("COMPANY_MANAGER");
-                given(orderTransactionService.findOrderItemsWithOrder(userId, null)).willReturn(List.of());
+                given(orderTransactionService.findAllWithOrder(userId, null)).willReturn(List.of());
 
                 //when
                 orderService.getOrdersByStatus(null);
 
                 //then
-                verify(orderTransactionService).findOrderItemsWithOrder(userId, null);
+                verify(orderTransactionService).findAllWithOrder(userId, null);
             }
 
             @Test
             public void 일반_유저가_상태를_지정하면_본인의_해당_상태_주문만_조회한다() {
                 //given
                 loginAs("COMPANY_MANAGER");
-                given(orderTransactionService.findOrderItemsWithOrder(userId, OrderStatus.WAITING)).willReturn(List.of());
+                given(orderTransactionService.findAllWithOrder(userId, "WAITING")).willReturn(List.of());
 
                 //when
                 orderService.getOrdersByStatus("WAITING");
 
                 //then
-                verify(orderTransactionService).findOrderItemsWithOrder(userId, OrderStatus.WAITING);
-            }
-
-            @Test
-            public void 상태가_빈_문자열이면_전체_상태로_조회한다() {
-                //given
-                loginAs("MASTER");
-                given(orderTransactionService.findOrderItemsWithOrder(null, null)).willReturn(List.of());
-
-                //when
-                orderService.getOrdersByStatus(" ");
-
-                //then
-                verify(orderTransactionService).findOrderItemsWithOrder(null, null);
+                verify(orderTransactionService).findAllWithOrder(userId, "WAITING");
             }
 
             @Test
             public void 조회된_주문이_없으면_빈_목록을_반환한다() {
                 //given
                 loginAs("MASTER");
-                given(orderTransactionService.findOrderItemsWithOrder(null, null)).willReturn(List.of());
+                given(orderTransactionService.findAllWithOrder(null, null)).willReturn(List.of());
 
                 //when
                 OrderListResponse response = orderService.getOrdersByStatus(null);
@@ -543,6 +742,17 @@ class OrderServiceTest {
 
                 //when, then
                 assertThatThrownBy(() -> orderService.getOrdersByStatus("SHIPPING"))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
+                verifyNoInteractions(orderTransactionService);
+            }
+
+            @Test
+            public void 상태가_빈_문자열이면_C400_예외가_발생하고_조회하지_않는다() {
+                //given
+                loginAs("MASTER");
+
+                //when, then
+                assertThatThrownBy(() -> orderService.getOrdersByStatus(" "))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
                 verifyNoInteractions(orderTransactionService);
             }

@@ -1,7 +1,10 @@
 package logistics.order.application.validator;
 
 import logistics.order.common.AuthHeaders;
+import logistics.order.domain.entity.Order;
+import logistics.order.domain.enums.OrderStatus;
 import logistics.order.infrastructure.client.UserServiceClient;
+import logistics.order.infrastructure.client.dto.CancelDeliveryResponse;
 import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
@@ -12,7 +15,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -176,6 +183,168 @@ class OrderValidatorTest {
                 assertThatThrownBy(() -> orderValidator.validateOrder(request))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_REQUESTER));
                 verify(userServiceClient).fetchUserById(userId);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("validateOrderOwner()")
+    class ValidateOrderOwner {
+
+        private Order orderOf(UUID orderUserId) {
+            return new Order(orderUserId, requesterId, UUID.randomUUID(), "서울시 강남구", null);
+        }
+
+        @Nested
+        @DisplayName("정상 케이스")
+        class Success {
+
+            @Test
+            public void 본인이_생성한_주문이면_통과한다() {
+                //given
+                loginAs("COMPANY_MANAGER");
+
+                //when, then
+                assertThatCode(() -> orderValidator.validateOrderOwner(userId))
+                        .doesNotThrowAnyException();
+            }
+
+            @Test
+            public void MASTER는_다른_사람의_주문도_통과한다() {
+                //given
+                loginAs("MASTER");
+
+                //when, then
+                assertThatCode(() -> orderValidator.validateOrderOwner(UUID.randomUUID()))
+                        .doesNotThrowAnyException();
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스")
+        class Failure {
+
+            @Test
+            public void 다른_사람의_주문이면_C403_FORBIDDEN_ORDER_예외가_발생한다() {
+                //given
+                loginAs("COMPANY_MANAGER");
+
+                //when, then
+                assertThatThrownBy(() -> orderValidator.validateOrderOwner(UUID.randomUUID()))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_ORDER));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("validateOrderStatus()")
+    class ValidateOrderStatus {
+
+        @Nested
+        @DisplayName("정상 케이스")
+        class Success {
+
+            @ParameterizedTest
+            @EnumSource(OrderStatus.class)
+            public void 존재하는_상태면_통과한다(OrderStatus status) {
+                //when, then
+                assertThatCode(() -> orderValidator.validateOrderStatus(status.name()))
+                        .doesNotThrowAnyException();
+            }
+
+            @Test
+            public void 상태가_없으면_통과한다() {
+                //when, then
+                assertThatCode(() -> orderValidator.validateOrderStatus(null))
+                        .doesNotThrowAnyException();
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스")
+        class Failure {
+
+            @ParameterizedTest
+            @ValueSource(strings = {"SHIPPING", "confirmed", "CANCELED", "", " "})
+            public void 존재하지_않는_상태면_C400_INVALID_ORDER_STATUS_예외가_발생한다(String status) {
+                //when, then
+                assertThatThrownBy(() -> orderValidator.validateOrderStatus(status))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("validateCancelable()")
+    class ValidateCancelable {
+
+        private Order orderOf(OrderStatus status) {
+            Order order = new Order(userId, requesterId, UUID.randomUUID(), "서울시 강남구", null);
+            ReflectionTestUtils.setField(order, "orderStatus", status);
+            return order;
+        }
+
+        @Nested
+        @DisplayName("정상 케이스")
+        class Success {
+
+            @Test
+            public void 확정된_주문이면_통과한다() {
+                //when, then
+                assertThatCode(() -> orderValidator.validateCancelable(orderOf(OrderStatus.CONFIRMED)))
+                        .doesNotThrowAnyException();
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스")
+        class Failure {
+
+            @ParameterizedTest
+            @EnumSource(value = OrderStatus.class, names = "CONFIRMED", mode = EnumSource.Mode.EXCLUDE)
+            public void CONFIRMED가_아니면_C409_INVALID_ORDER_STATUS_예외가_발생한다(OrderStatus status) {
+                //when, then
+                assertThatThrownBy(() -> orderValidator.validateCancelable(orderOf(status)))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_INVALID_ORDER_STATUS));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("validateDeliveryCanceled()")
+    class ValidateDeliveryCanceled {
+
+        @Nested
+        @DisplayName("정상 케이스")
+        class Success {
+
+            @Test
+            public void 배송상태가_CANCELLED면_통과한다() {
+                //when, then
+                assertThatCode(() -> orderValidator.validateDeliveryCanceled(
+                        new CancelDeliveryResponse(UUID.randomUUID(), "CANCELLED")))
+                        .doesNotThrowAnyException();
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스")
+        class Failure {
+
+            @ParameterizedTest
+            @ValueSource(strings = {"WAITING", "HUB_IN_TRANSIT", "CANCELED"})
+            public void 배송상태가_CANCELLED가_아니면_C409_ORDER_NOT_CANCELABLE_예외가_발생한다(String status) {
+                //when, then
+                assertThatThrownBy(() -> orderValidator.validateDeliveryCanceled(
+                        new CancelDeliveryResponse(UUID.randomUUID(), status)))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
+            }
+
+            @Test
+            public void 응답이_없으면_C409_ORDER_NOT_CANCELABLE_예외가_발생한다() {
+                //when, then
+                assertThatThrownBy(() -> orderValidator.validateDeliveryCanceled(null))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
             }
         }
     }
