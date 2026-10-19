@@ -11,8 +11,8 @@ import logistics.order.infrastructure.AuditorAwareImpl;
 import logistics.order.infrastructure.client.UserServiceClient;
 import logistics.order.infrastructure.repository.OrderItemRepository;
 import logistics.order.infrastructure.repository.OrderRepository;
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import org.hibernate.Hibernate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -515,7 +515,7 @@ class OrderTransactionServiceTest {
             @Test
             public void 상태별_주문은_최신순으로_조회된다() {
                 //when
-                List<OrderItem> result = orderTransactionService.findAllWithOrder(null, "CONFIRMED");
+                List<OrderItem> result = orderTransactionService.findAllWithOrder(null, OrderStatus.CONFIRMED);
 
                 //then
                 assertThat(orderIds(result)).containsExactly(
@@ -535,7 +535,7 @@ class OrderTransactionServiceTest {
             @Test
             public void 유저와_상태별_주문은_최신순으로_조회된다() {
                 //when
-                List<OrderItem> result = orderTransactionService.findAllWithOrder(userId, "CONFIRMED");
+                List<OrderItem> result = orderTransactionService.findAllWithOrder(userId, OrderStatus.CONFIRMED);
 
                 //then
                 assertThat(orderIds(result)).containsExactly(myConfirmedLatest.getId(), myConfirmed.getId());
@@ -555,7 +555,7 @@ class OrderTransactionServiceTest {
         @Test
         public void 상태만_지정하면_해당_상태의_전체_주문을_조회한다() {
             //when
-            List<OrderItem> result = orderTransactionService.findAllWithOrder(null, "CONFIRMED");
+            List<OrderItem> result = orderTransactionService.findAllWithOrder(null, OrderStatus.CONFIRMED);
 
             //then
             assertThat(orderIds(result)).containsExactlyInAnyOrder(myConfirmed.getId(), otherConfirmed.getId());
@@ -573,7 +573,7 @@ class OrderTransactionServiceTest {
         @Test
         public void 유저와_상태를_지정하면_해당_유저의_해당_상태_주문만_조회한다() {
             //when
-            List<OrderItem> result = orderTransactionService.findAllWithOrder(userId, "WAITING");
+            List<OrderItem> result = orderTransactionService.findAllWithOrder(userId, OrderStatus.WAITING);
 
             //then
             assertThat(orderIds(result)).containsExactly(myWaiting.getId());
@@ -591,7 +591,7 @@ class OrderTransactionServiceTest {
         @Test
         public void 조건에_맞는_주문이_없으면_빈_목록을_반환한다() {
             //when
-            List<OrderItem> result = orderTransactionService.findAllWithOrder(otherUserId, "WAITING");
+            List<OrderItem> result = orderTransactionService.findAllWithOrder(otherUserId, OrderStatus.WAITING);
 
             //then
             assertThat(result).isEmpty();

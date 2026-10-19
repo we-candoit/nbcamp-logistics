@@ -23,8 +23,8 @@ import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
 import logistics.order.presentation.dto.response.OrderDetailResponse;
 import logistics.order.presentation.dto.response.OrderListResponse;
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -451,7 +451,10 @@ class OrderServiceTest {
         private Order givenCancelableOrder() {
             Order order = new Order(userId, requesterId, requesterHubId, "서울시 강남구 테헤란로 1", null);
             order.confirm(deliveryId);
-            given(orderTransactionService.cancel(order.getId())).willAnswer(invocation -> order.cancel());
+            given(orderTransactionService.cancel(order.getId())).willAnswer(invocation -> {
+                order.cancel();
+                return order;
+            });
             given(deliveryServiceClient.cancelDelivery(deliveryId))
                     .willReturn(new CancelDeliveryResponse(deliveryId, "CANCELLED"));
             return order;
@@ -682,13 +685,13 @@ class OrderServiceTest {
             public void MASTER가_상태를_지정하면_해당_상태로_조회한다() {
                 //given
                 loginAs("MASTER");
-                given(orderTransactionService.findAllWithOrder(null, "CONFIRMED")).willReturn(List.of());
+                given(orderTransactionService.findAllWithOrder(null, OrderStatus.CONFIRMED)).willReturn(List.of());
 
                 //when
-                orderService.getOrdersByStatus("CONFIRMED");
+                orderService.getOrdersByStatus(OrderStatus.CONFIRMED);
 
                 //then
-                verify(orderTransactionService).findAllWithOrder(null, "CONFIRMED");
+                verify(orderTransactionService).findAllWithOrder(null, OrderStatus.CONFIRMED);
             }
 
             @Test
@@ -708,13 +711,13 @@ class OrderServiceTest {
             public void 일반_유저가_상태를_지정하면_본인의_해당_상태_주문만_조회한다() {
                 //given
                 loginAs("COMPANY_MANAGER");
-                given(orderTransactionService.findAllWithOrder(userId, "WAITING")).willReturn(List.of());
+                given(orderTransactionService.findAllWithOrder(userId, OrderStatus.WAITING)).willReturn(List.of());
 
                 //when
-                orderService.getOrdersByStatus("WAITING");
+                orderService.getOrdersByStatus(OrderStatus.WAITING);
 
                 //then
-                verify(orderTransactionService).findAllWithOrder(userId, "WAITING");
+                verify(orderTransactionService).findAllWithOrder(userId, OrderStatus.WAITING);
             }
 
             @Test
@@ -728,44 +731,6 @@ class OrderServiceTest {
 
                 //then
                 assertThat(response.getOrders()).isEmpty();
-            }
-        }
-
-        @Nested
-        @DisplayName("실패 케이스")
-        class Failure {
-
-            @Test
-            public void 존재하지_않는_상태면_C400_예외가_발생하고_조회하지_않는다() {
-                //given
-                loginAs("MASTER");
-
-                //when, then
-                assertThatThrownBy(() -> orderService.getOrdersByStatus("SHIPPING"))
-                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
-                verifyNoInteractions(orderTransactionService);
-            }
-
-            @Test
-            public void 상태가_빈_문자열이면_C400_예외가_발생하고_조회하지_않는다() {
-                //given
-                loginAs("MASTER");
-
-                //when, then
-                assertThatThrownBy(() -> orderService.getOrdersByStatus(" "))
-                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
-                verifyNoInteractions(orderTransactionService);
-            }
-
-            @Test
-            public void 소문자_상태는_유효하지_않은_상태로_처리한다() {
-                //given
-                loginAs("MASTER");
-
-                //when, then
-                assertThatThrownBy(() -> orderService.getOrdersByStatus("confirmed"))
-                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
-                verifyNoInteractions(orderTransactionService);
             }
         }
     }
