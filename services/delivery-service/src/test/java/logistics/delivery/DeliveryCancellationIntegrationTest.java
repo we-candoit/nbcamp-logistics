@@ -135,9 +135,9 @@ class DeliveryCancellationIntegrationTest {
         assertThat(cancel(deliveryId, "canceluser").statusCode()).isEqualTo(200);
         // 삭제 API가 아직 없으므로 테스트 DB에만 논리 삭제 상태를 준비한다.
         jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ? WHERE delivery_id = ?",
-                "deleteuser", deliveryId);
+                UUID.nameUUIDFromBytes("deleteuser".getBytes(StandardCharsets.UTF_8)), deliveryId);
         jdbc.update("UPDATE p_deliveries SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ? WHERE id = ?",
-                "deleteuser", deliveryId);
+                UUID.nameUUIDFromBytes("deleteuser".getBytes(StandardCharsets.UTF_8)), deliveryId);
         DatabaseSnapshot before = snapshot(deliveryId);
 
         HttpResponse<String> response = cancel(deliveryId, "retryuser");
@@ -216,7 +216,7 @@ class DeliveryCancellationIntegrationTest {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + path))
                 .timeout(Duration.ofSeconds(10))
-                .header("X-User-Name", username)
+                .header("X-User-Id", UUID.nameUUIDFromBytes(username.getBytes(StandardCharsets.UTF_8)).toString())
                 .header("X-Role-Name", "USER");
         if (body == null) {
             builder.POST(HttpRequest.BodyPublishers.noBody());
@@ -240,7 +240,7 @@ class DeliveryCancellationIntegrationTest {
         assertThat(after.get("STATUS")).isEqualTo("CANCELLED");
         assertThat(after.get("CREATED_BY")).isEqualTo(before.get("CREATED_BY"));
         assertThat(after.get("CREATED_AT")).isEqualTo(before.get("CREATED_AT"));
-        assertThat(after.get("UPDATED_BY")).isEqualTo("canceluser");
+        assertThat(after.get("UPDATED_BY")).isEqualTo(UUID.nameUUIDFromBytes("canceluser".getBytes(StandardCharsets.UTF_8)));
         assertThat(after.get("UPDATED_AT")).isNotNull();
         assertThat(after.get("DELETED_AT")).isNull();
         assertThat(after.get("DELETED_BY")).isNull();

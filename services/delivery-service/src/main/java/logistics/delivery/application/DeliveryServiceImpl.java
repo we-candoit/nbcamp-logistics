@@ -42,7 +42,7 @@ public class DeliveryServiceImpl implements DeliveryService{
 
     private final DeliveryRepository deliveryRepository;
     private final DeliveryRouteRepository deliveryRouteRepository;
-    private final AuditorAware<String> auditorAware;
+    private final AuditorAware<UUID> auditorAware;
     private final HubClient hubClient;
     private final OrderClient orderClient;
     private final UserClient userClient;
@@ -103,9 +103,9 @@ public class DeliveryServiceImpl implements DeliveryService{
      * @return
      */
     @Override
-    public DeliveryDetailResponse getDeliveryDetail(UUID deliveryId, UUID userId, String username, String role) {
+    public DeliveryDetailResponse getDeliveryDetail(UUID deliveryId, UUID userId, String role) {
 
-        Delivery delivery = getAccessibleDelivery(deliveryId, userId, username, role);
+        Delivery delivery = getAccessibleDelivery(deliveryId, userId, role);
 
         return DeliveryDetailResponse.from(delivery);
     }
@@ -118,7 +118,7 @@ public class DeliveryServiceImpl implements DeliveryService{
      * @param role MASTER의 전체 조회 권한 확인
      * @return
      */
-    private Delivery getAccessibleDelivery(UUID deliveryId, UUID userId, String username, String role) {
+    private Delivery getAccessibleDelivery(UUID deliveryId, UUID userId, String role) {
 
         // 조회 권한 검증
         if(!"MASTER".equals(role) && !"USER".equals(role)){
@@ -140,7 +140,6 @@ public class DeliveryServiceImpl implements DeliveryService{
             order = orderClient.getOrderDetail(
                     delivery.getOrderId(),
                     userId,
-                    username,
                     role
             );
         } catch (FeignException e){
@@ -188,8 +187,8 @@ public class DeliveryServiceImpl implements DeliveryService{
      * @return
      */
     @Override
-    public List<DeliveryRouteResponse> getDeliveryRoutes(UUID deliveryId, UUID userId, String username, String role) {
-        Delivery delivery = getAccessibleDelivery(deliveryId, userId, username, role);
+    public List<DeliveryRouteResponse> getDeliveryRoutes(UUID deliveryId, UUID userId, String role) {
+        Delivery delivery = getAccessibleDelivery(deliveryId, userId, role);
         return deliveryRouteRepository.findAllByDeliveryIdAndDeletedAtIsNullOrderBySequenceAsc(delivery.getId())
                 .stream()
                 .map(DeliveryRouteResponse::from)
@@ -374,17 +373,17 @@ public class DeliveryServiceImpl implements DeliveryService{
             throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
         }
 
-        String username = auditorAware.getCurrentAuditor()
+        UUID userId = auditorAware.getCurrentAuditor()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "삭제 요청자 정보를 확인할 수 없습니다."));
 
         List<DeliveryRoute> routes = deliveryRouteRepository.findAllByDeliveryIdOrderBySequenceAsc(deliveryId);
 
         LocalDateTime deletedAt = LocalDateTime.now();
 
-        delivery.delete(username, deletedAt);
+        delivery.delete(userId, deletedAt);
 
         for(DeliveryRoute route : routes){
-            route.delete(username, deletedAt);
+            route.delete(userId, deletedAt);
         }
     }
 

@@ -104,7 +104,7 @@ class DeliveryRouteIntegrationTest {
                 }
                 """.formatted(orderId, hubId, hubId);
         HttpRequest request = request("/internal/deliveries")
-                .header("X-User-Name", "createuser")
+                .header("X-User-Id", UUID.nameUUIDFromBytes("createuser".getBytes(StandardCharsets.UTF_8)).toString())
                 .header("X-Role-Name", "USER")
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build();
@@ -140,17 +140,17 @@ class DeliveryRouteIntegrationTest {
     @Test
     @DisplayName("가짜 주문 응답의 주문자가 요청자와 같으면 배송 경로 조회한다")
     void orderOwnerCanReadUsingMockResponse() throws Exception {
-        when(orderClient.getOrderDetail(orderId, userId, "reader", "USER"))
+        when(orderClient.getOrderDetail(orderId, userId, "USER"))
                 .thenReturn(new OrderDetailResponse(orderId, userId));
         assertDetail(get(deliveryId, userId.toString(), "reader", "USER"));
         // 메서드에 원 요청자 정보를 전달하는지 검증한다. 실제 HTTP 헤더 전송 검증은 아니다.
-        verify(orderClient).getOrderDetail(orderId, userId, "reader", "USER");
+        verify(orderClient).getOrderDetail(orderId, userId, "USER");
     }
 
     @Test
     @DisplayName("가짜 주문 응답의 주문자가 다른 사용자인 경우 404로 숨긴다")
     void otherUserCannotRead() throws Exception {
-        when(orderClient.getOrderDetail(orderId, userId, "reader", "USER"))
+        when(orderClient.getOrderDetail(orderId, userId, "USER"))
                 .thenReturn(new OrderDetailResponse(orderId, UUID.randomUUID()));
         assertThat(get(deliveryId, userId.toString(), "reader", "USER").statusCode()).isEqualTo(404);
     }
@@ -158,12 +158,12 @@ class DeliveryRouteIntegrationTest {
     @Test
     @DisplayName("삭제된 경로의 담당 관계만으로는 조회를 허용하지 않는다")
     void deletedRouteDoesNotGrantAccess() throws Exception {
-        jdbc.update("UPDATE p_delivery_routes SET manager_id = ?, deleted_at = CURRENT_TIMESTAMP, deleted_by = 'test' WHERE delivery_id = ?",
+        jdbc.update("UPDATE p_delivery_routes SET manager_id = ?, deleted_at = CURRENT_TIMESTAMP, deleted_by = '00000000-0000-4000-8000-000000000001' WHERE delivery_id = ?",
                 userId, deliveryId);
-        when(orderClient.getOrderDetail(orderId, userId, "reader", "USER"))
+        when(orderClient.getOrderDetail(orderId, userId, "USER"))
                 .thenReturn(new OrderDetailResponse(orderId, UUID.randomUUID()));
         assertThat(get(deliveryId, userId.toString(), "reader", "USER").statusCode()).isEqualTo(404);
-        verify(orderClient).getOrderDetail(orderId, userId, "reader", "USER");
+        verify(orderClient).getOrderDetail(orderId, userId, "USER");
     }
 
     @Test
@@ -176,7 +176,7 @@ class DeliveryRouteIntegrationTest {
     @Test
     @DisplayName("논리 삭제된 배송은 MASTER에게도 404를 반환한다")
     void deletedDeliveryReturns404() throws Exception {
-        jdbc.update("UPDATE p_deliveries SET deleted_at = CURRENT_TIMESTAMP, deleted_by = 'test' WHERE id = ?", deliveryId);
+        jdbc.update("UPDATE p_deliveries SET deleted_at = CURRENT_TIMESTAMP, deleted_by = '00000000-0000-4000-8000-000000000001' WHERE id = ?", deliveryId);
         assertThat(get(deliveryId, userId.toString(), "reader", "MASTER").statusCode()).isEqualTo(404);
         verifyNoInteractions(orderClient);
     }
@@ -189,7 +189,7 @@ class DeliveryRouteIntegrationTest {
                 Map.of(), new byte[0], StandardCharsets.UTF_8, null);
         FeignException failure = FeignException.errorStatus("getOrderDetail",
                 Response.builder().request(request).status(orderStatus).reason("test failure").build());
-        when(orderClient.getOrderDetail(orderId, userId, "reader", "USER")).thenThrow(failure);
+        when(orderClient.getOrderDetail(orderId, userId, "USER")).thenThrow(failure);
         assertThat(get(deliveryId, userId.toString(), "reader", "USER").statusCode()).isEqualTo(expectedStatus);
     }
 
@@ -203,7 +203,7 @@ class DeliveryRouteIntegrationTest {
             case "wrongOrderId" -> new OrderDetailResponse(UUID.randomUUID(), userId);
             default -> new OrderDetailResponse(orderId, null);
         };
-        when(orderClient.getOrderDetail(orderId, userId, "reader", "USER")).thenReturn(order);
+        when(orderClient.getOrderDetail(orderId, userId, "USER")).thenReturn(order);
         assertThat(get(deliveryId, userId.toString(), "reader", "USER").statusCode()).isEqualTo(503);
     }
 
@@ -211,7 +211,6 @@ class DeliveryRouteIntegrationTest {
     @CsvSource(value = {
             "NULL|reader|MASTER|401",
             "invalid-id|reader|MASTER|400",
-            "VALID|NULL|MASTER|401",
             "VALID|reader|NULL|401",
             "VALID|reader|INVALID|403"
     }, delimiter = '|')
@@ -225,7 +224,6 @@ class DeliveryRouteIntegrationTest {
     private HttpResponse<String> get(UUID id, String userId, String username, String role) throws Exception {
         HttpRequest.Builder builder = request("/api/deliveries/" + id + "/routes").GET();
         if (!"NULL".equals(userId)) builder.header("X-User-Id", userId);
-        if (!"NULL".equals(username)) builder.header("X-User-Name", username);
         if (!"NULL".equals(role)) builder.header("X-Role-Name", role);
         return send(builder.build());
     }
@@ -273,7 +271,7 @@ class DeliveryRouteIntegrationTest {
     @Test
     @DisplayName("논리 삭제된 경로는 반환 목록에서 제외한다")
     void excludesDeletedRoutes() throws Exception {
-        jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = 'test' WHERE delivery_id = ?", deliveryId);
+        jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = '00000000-0000-4000-8000-000000000001' WHERE delivery_id = ?", deliveryId);
         var delivery = deliveryRepository.findById(deliveryId).orElseThrow();
         UUID activeId = insertRoute(2, delivery.getDestinationHubId(), null, "HUB_TO_COMPANY");
         HttpResponse<String> response = get(deliveryId, userId.toString(), "reader", "MASTER");
@@ -285,7 +283,7 @@ class DeliveryRouteIntegrationTest {
     @Test
     @DisplayName("조회 가능한 배송에 활성 경로가 없으면 빈 배열을 반환한다")
     void returnsEmptyArrayWithoutActiveRoutes() throws Exception {
-        jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = 'test' WHERE delivery_id = ?", deliveryId);
+        jdbc.update("UPDATE p_delivery_routes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = '00000000-0000-4000-8000-000000000001' WHERE delivery_id = ?", deliveryId);
         HttpResponse<String> response = get(deliveryId, userId.toString(), "reader", "MASTER");
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat((Integer) JsonPath.read(response.body(), "$.length()")).isZero();
@@ -298,7 +296,7 @@ class DeliveryRouteIntegrationTest {
                 INSERT INTO p_delivery_routes
                 (id, delivery_id, sequence, departure_hub_id, destination_hub_id,
                  status, type, created_at, created_by, updated_at, updated_by)
-                VALUES (?, ?, ?, ?, ?, 'WAITING', ?, CURRENT_TIMESTAMP, 'fixture', CURRENT_TIMESTAMP, 'fixture')
+                VALUES (?, ?, ?, ?, ?, 'WAITING', ?, CURRENT_TIMESTAMP, '00000000-0000-4000-8000-000000000001', CURRENT_TIMESTAMP, '00000000-0000-4000-8000-000000000001')
                 """, id, deliveryId, sequence, departure, destination, type);
         return id;
     }

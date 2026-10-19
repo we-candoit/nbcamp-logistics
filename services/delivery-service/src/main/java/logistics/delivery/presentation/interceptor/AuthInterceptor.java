@@ -13,7 +13,6 @@ import java.util.UUID;
 public class AuthInterceptor implements HandlerInterceptor {
 
     public static final String USER_ID_HEADER = "X-User-Id";
-    public static final String USER_HEADER = "X-User-Name";
     public static final String ROLE_HEADER = "X-Role-Name";
 
     public static UUID getUserId(HttpServletRequest request){
@@ -26,7 +25,11 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         try{
-            return UUID.fromString(userId);
+            UUID parsed = UUID.fromString(userId);
+            if (!parsed.toString().equalsIgnoreCase(userId)) {
+                throw new IllegalArgumentException();
+            }
+            return parsed;
         } catch(IllegalArgumentException e){
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "사용자 ID는 UUID 형식이어야 합니다."
@@ -36,20 +39,15 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        String username = request.getHeader(USER_HEADER);
+        UUID userId = getUserId(request);
         String role = request.getHeader(ROLE_HEADER);
-
-        if (username == null || username.isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED, "사용자 이름 헤더가 필요합니다.");
-        }
 
         if (role == null || role.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "역할 헤더가 필요합니다."
             );
         }
 
-        request.setAttribute(USER_HEADER, username);
+        request.setAttribute(USER_ID_HEADER, userId);
         request.setAttribute(ROLE_HEADER, role);
 
         return true;

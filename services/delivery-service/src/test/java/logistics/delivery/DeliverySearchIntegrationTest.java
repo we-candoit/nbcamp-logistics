@@ -96,9 +96,9 @@ class DeliverySearchIntegrationTest {
                      address, recipient_name, recipient_phone, created_at, updated_at,
                      created_by, updated_by, deleted_at, deleted_by)
                     VALUES (?, ?, ?, ?, ?, ?, 'test address', 'recipient', '010-0000-0000',
-                            ?, ?, 'search-fixture', 'search-fixture', ?, ?)
+                            ?, ?, '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001', ?, ?)
                     """, deliveryId(n), orderId(n), manager, departure, destination, statuses[n - 1],
-                    created, updated, deleted, deleted == null ? null : "search-fixture");
+                    created, updated, deleted, deleted == null ? null : "00000000-0000-4000-8000-000000000001");
 
             for (int sequence = 1; sequence <= 2; sequence++) {
                 boolean deletedRoute = n == 8 || n == 3 && sequence == 1;
@@ -116,11 +116,11 @@ class DeliverySearchIntegrationTest {
                         INSERT INTO p_delivery_routes
                         (id, delivery_id, sequence, manager_id, departure_hub_id, destination_hub_id,
                          type, status, created_at, updated_at, created_by, updated_by, deleted_at, deleted_by)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'search-fixture', 'search-fixture', ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001', ?, ?)
                         """, routeId(n, sequence), deliveryId(n), sequence, routeManager,
                         sequence == 1 ? departure : destination, sequence == 1 ? destination : null,
                         sequence == 1 ? "HUB_TO_HUB" : "HUB_TO_COMPANY", routeStatus,
-                        created, updated, deletedRoute ? updated : null, deletedRoute ? "search-fixture" : null);
+                        created, updated, deletedRoute ? updated : null, deletedRoute ? "00000000-0000-4000-8000-000000000001" : null);
             }
         }
     }
@@ -292,8 +292,6 @@ class DeliverySearchIntegrationTest {
             "NULL|reader|MASTER|401",
             "BLANK|reader|MASTER|401",
             "invalid|reader|MASTER|400",
-            "VALID|NULL|MASTER|401",
-            "VALID|BLANK|MASTER|401",
             "VALID|reader|NULL|401",
             "VALID|reader|BLANK|401",
             "VALID|reader|ADMIN|403"
@@ -331,7 +329,6 @@ class DeliverySearchIntegrationTest {
                 .uri(URI.create("http://localhost:" + port + "/api/deliveries" + query))
                 .timeout(Duration.ofSeconds(10)).GET();
         addHeader(request, "X-User-Id", userId);
-        addHeader(request, "X-User-Name", name);
         addHeader(request, "X-Role-Name", role);
         return client.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     }

@@ -165,7 +165,7 @@ class DeliveryCreationIntegrationTest {
                 .uri(URI.create("http://localhost:" + port + "/internal/deliveries"))
                 .timeout(Duration.ofSeconds(10))
                 .header("Content-Type", "application/json")
-                .header("X-User-Name", username)
+                .header("X-User-Id", UUID.nameUUIDFromBytes(username.getBytes(StandardCharsets.UTF_8)).toString())
                 .header("X-Role-Name", "USER")
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
                 .build();
@@ -187,8 +187,8 @@ class DeliveryCreationIntegrationTest {
     }
 
     private void assertInitialAudit(BaseEntity entity) {
-        assertThat(entity.getCreatedBy()).isEqualTo("testuser");
-        assertThat(entity.getUpdatedBy()).isEqualTo("testuser");
+        assertThat(entity.getCreatedBy()).isEqualTo(UUID.nameUUIDFromBytes("testuser".getBytes(StandardCharsets.UTF_8)));
+        assertThat(entity.getUpdatedBy()).isEqualTo(UUID.nameUUIDFromBytes("testuser".getBytes(StandardCharsets.UTF_8)));
         assertThat(entity.getCreatedAt()).isNotNull();
         assertThat(entity.getUpdatedAt()).isEqualTo(entity.getCreatedAt());
         assertThat(entity.getDeletedAt()).isNull();
@@ -197,7 +197,7 @@ class DeliveryCreationIntegrationTest {
 
     private record DeliverySnapshot(
             UUID id, String address, DeliveryStatus status,
-            String createdBy, String updatedBy,
+            UUID createdBy, UUID updatedBy,
             LocalDateTime createdAt, LocalDateTime updatedAt
     ) {
         static DeliverySnapshot from(Delivery delivery) {
@@ -209,7 +209,7 @@ class DeliveryCreationIntegrationTest {
 
     private record RouteSnapshot(
             UUID id, Integer sequence, RouteType type, DeliveryRouteStatus status,
-            String createdBy, String updatedBy,
+            UUID createdBy, UUID updatedBy,
             LocalDateTime createdAt, LocalDateTime updatedAt
     ) {
         static RouteSnapshot from(DeliveryRoute route) {

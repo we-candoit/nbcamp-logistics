@@ -69,12 +69,6 @@ public interface DeliveryApiSpec {
                     schema = @Schema(type = "string", format = "uuid")
             ),
             @Parameter(
-                    name = "X-User-Name",
-                    in = ParameterIn.HEADER,
-                    required = true,
-                    description = "조회 요청자의 username"
-            ),
-            @Parameter(
                     name = "X-Role-Name",
                     in = ParameterIn.HEADER,
                     required = true,
@@ -174,12 +168,6 @@ public interface DeliveryApiSpec {
                     schema = @Schema(type = "string", format = "uuid")
             ),
             @Parameter(
-                    name = "X-User-Name",
-                    in = ParameterIn.HEADER,
-                    required = true,
-                    description = "조회 요청자의 username"
-            ),
-            @Parameter(
                     name = "X-Role-Name",
                     in = ParameterIn.HEADER,
                     required = true,
@@ -255,12 +243,6 @@ public interface DeliveryApiSpec {
                     schema = @Schema(type = "string", format = "uuid")
             ),
             @Parameter(
-                    name = "X-User-Name",
-                    in = ParameterIn.HEADER,
-                    required = true,
-                    description = "조회 요청자의 username"
-            ),
-            @Parameter(
                     name = "X-Role-Name",
                     in = ParameterIn.HEADER,
                     required = true,
@@ -312,12 +294,6 @@ public interface DeliveryApiSpec {
                     required = true,
                     description = "배정을 요청하는 MASTER의 사용자 ID",
                     schema = @Schema(type = "string", format = "uuid")
-            ),
-            @Parameter(
-                    name = "X-User-Name",
-                    in = ParameterIn.HEADER,
-                    required = true,
-                    description = "감사 기록에 사용할 요청자 username"
             ),
             @Parameter(
                     name = "X-Role-Name",
@@ -397,12 +373,6 @@ public interface DeliveryApiSpec {
                     required = true,
                     description = "상태 변경 요청자의 사용자 ID",
                     schema = @Schema(type = "string", format = "uuid")
-            ),
-            @Parameter(
-                    name = "X-User-Name",
-                    in = ParameterIn.HEADER,
-                    required = true,
-                    description = "감사 기록에 사용할 요청자 username"
             ),
             @Parameter(
                     name = "X-Role-Name",
