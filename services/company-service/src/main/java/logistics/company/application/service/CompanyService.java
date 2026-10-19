@@ -9,6 +9,7 @@ import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.infrastructure.repository.CompanySpecification;
 import logistics.company.presentation.dto.request.company.CompanyCreateRequest;
 import logistics.company.presentation.dto.request.company.CompanySearchCondition;
+import logistics.company.presentation.dto.request.company.CompanyUpdateRequest;
 import logistics.company.presentation.dto.response.CompanyResponse;
 import logistics.company.presentation.exception.BusinessException;
 import logistics.company.presentation.exception.ErrorCode;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -89,5 +91,54 @@ public class CompanyService {
         Company company = companyRepository.findById(companyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
         return CompanyResponse.from(company);
+    }
+
+    public CompanyResponse updateCompany(UUID companyId, UUID userId, String role, @Valid CompanyUpdateRequest request) {
+        // 1. 업체 조회 (없거나 삭제됐으면 404)
+        Company company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
+
+        // 2. 권한 체크: MASTER 또는 해당 업체 관리자 본인
+        boolean isMaster = MASTER.equals(role);
+        if (!isMaster && !company.isManagedBy(userId)) {
+            throw new BusinessException(ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+        }
+
+        // 3. 기존 값과 비교해 실제로 바뀌는 항목만 판별 (null = 변경 안 함, 수정 취소)
+        boolean hubChanged = isChanged(request.getHubId(), company.getHubId());
+        boolean nameChanged = isChanged(request.getName(), company.getName());
+        boolean addressChanged = isChanged(request.getAddress(), company.getAddress());
+
+        // 바뀌는 항목이 없으면 400 (모두 null이거나 모두 기존과 같은 경우)
+        if (!hubChanged && !nameChanged && !addressChanged) {
+            throw new BusinessException(ErrorCode.NO_UPDATE_FIELDS);
+        }
+
+        // 4. 허브 변경: MASTER 권한 체크 + 허브 존재 확인 (실패 시 403)
+        if (hubChanged) {
+            if (!isMaster) {
+                throw new BusinessException(ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+            }
+            hubClient.getHub(request.getHubId());
+            company.changeHub(request.getHubId());
+        }
+
+        // 5. 업체명, 주소 변경
+        if (nameChanged) {
+            company.changeName(request.getName());
+        }
+        if (addressChanged) {
+            company.changeAddress(request.getAddress());
+        }
+
+        // 7. 수정사항 즉시 반영
+        companyRepository.flush();
+
+        return CompanyResponse.from(company);
+    }
+
+    private boolean isChanged(Object requested, Object current) {
+        // 요청 값이 있고, 기존 값과 다르면 변경 대상
+        return requested != null && !Objects.equals(requested, current);
     }
 }
