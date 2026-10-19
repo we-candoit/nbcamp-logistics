@@ -61,4 +61,23 @@ public class Order extends BaseEntity {
         this.deliveryId = deliveryId;
         this.orderStatus = OrderStatus.CONFIRMED;
     }
+
+    //주문취소 가능 여부
+    public boolean isCancelable() {
+        return this.orderStatus == OrderStatus.CONFIRMED;
+    }
+
+    //주문취소 상태변경
+    public Order cancel() {
+        if (isCancelable()) {
+            this.orderStatus = OrderStatus.CANCELLED;
+            return this;
+        }
+        return null;
+    }
+
+    //주문가능 상태변경
+    public void revertCancel() {
+        this.orderStatus = OrderStatus.CONFIRMED;
+    }
 }
