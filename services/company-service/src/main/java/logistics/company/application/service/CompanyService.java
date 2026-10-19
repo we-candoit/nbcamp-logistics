@@ -4,14 +4,17 @@ import jakarta.validation.Valid;
 import logistics.company.domain.entity.Company;
 import logistics.company.infrastructure.client.HubClient;
 import logistics.company.infrastructure.client.UserClient;
-import logistics.company.infrastructure.client.dto.UserAffiliationUpdateRequest;
 import logistics.company.infrastructure.client.dto.UserResponse;
 import logistics.company.infrastructure.repository.CompanyRepository;
+import logistics.company.infrastructure.repository.CompanySpecification;
 import logistics.company.presentation.dto.request.company.CompanyCreateRequest;
+import logistics.company.presentation.dto.request.company.CompanySearchCondition;
 import logistics.company.presentation.dto.response.CompanyResponse;
 import logistics.company.presentation.exception.BusinessException;
 import logistics.company.presentation.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -72,5 +75,19 @@ public class CompanyService {
         }
     }
 
+    // 업체 목록 검색 (업체명·주소 부분 일치, 페이징)
+    @Transactional(readOnly = true)
+    public Page<CompanyResponse> searchCompanies(CompanySearchCondition condition, Pageable pageable) {
+        return companyRepository
+                .findAll(CompanySpecification.search(condition.getCompanyName(), condition.getAddress()), pageable)
+                .map(CompanyResponse::from);
+    }
 
+    // 업체 상세 조회
+    @Transactional(readOnly = true)
+    public CompanyResponse getCompany(UUID companyId) {
+        Company company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
+        return CompanyResponse.from(company);
+    }
 }
