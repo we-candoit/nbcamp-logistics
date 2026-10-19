@@ -5,14 +5,17 @@ import logistics.user.domain.entity.User;
 import logistics.user.domain.enums.AffiliationType;
 import logistics.user.infrastructure.client.HubClient;
 import logistics.user.infrastructure.client.HubResponse;
+import logistics.user.infrastructure.jwt.JwtUtil;
 import logistics.user.infrastructure.repository.UserRepository;
 import logistics.user.presentation.dto.response.JoinResponse;
+import logistics.user.presentation.dto.response.LoginResponse;
 import logistics.user.presentation.exception.CustomException;
-import logistics.user.presentation.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import static logistics.user.presentation.exception.ErrorCode.*;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +24,7 @@ public class AuthService {
 
     private final PasswordEncoder passwordEncoder;
     private final HubClient hubClient;
+    private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
 
     // 회원가입
@@ -30,13 +34,13 @@ public class AuthService {
         String validatedEmail = (email == null || email.isBlank()) ? null : email.trim();
 
         if (userRepository.existsByLoginId(loginId)) {
-            throw new CustomException(ErrorCode.DUPLICATE_LOGIN_ID);
+            throw new CustomException(DUPLICATE_LOGIN_ID);
         }
         if (validatedEmail != null && userRepository.existsByEmail(validatedEmail)) {
-            throw new CustomException(ErrorCode.DUPLICATE_EMAIL);
+            throw new CustomException(DUPLICATE_EMAIL);
         }
         if (userRepository.existsBySlackId(slackId)) {
-            throw new CustomException(ErrorCode.DUPLICATE_SLACK_ID);
+            throw new CustomException(DUPLICATE_SLACK_ID);
         }
 
         String encodedPassword = passwordEncoder.encode(rawPassword);
@@ -53,14 +57,28 @@ public class AuthService {
         return new JoinResponse(user);
     }
 
+    // 로그인
+    public LoginResponse login(String loginId, String rawPassword) {
+        // 보안상 아이디가 틀렸는지 비밀번호가 틀렸는지 알려주지 않음
+        User user = userRepository.findByLoginId(loginId).orElseThrow(
+                () -> new CustomException(LOGIN_FAILED)
+        );
+        if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
+            throw new CustomException(LOGIN_FAILED);
+        }
+
+        String accessToken = jwtUtil.createToken(user.getId(), user.getRole());
+        return new LoginResponse(accessToken);
+    }
+
     // 유저가 잘못 입력한 경우와 Hub Server 자체 문제인 경우를 구분하기 위한 메서드
     private HubResponse findHub(String hubName) {
         try {
             return hubClient.getHubByName(hubName);
         } catch (FeignException.NotFound e) {
-            throw new CustomException(ErrorCode.HUB_NOT_FOUND);
+            throw new CustomException(HUB_NOT_FOUND);
         } catch (FeignException e) {
-            throw new CustomException(ErrorCode.HUB_SERVICE_UNAVAILABLE);
+            throw new CustomException(HUB_SERVICE_UNAVAILABLE);
         }
     }
 }
