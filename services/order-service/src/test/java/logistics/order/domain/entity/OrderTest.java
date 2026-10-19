@@ -181,6 +181,57 @@ class OrderTest {
     }
 
     @Nested
+    @DisplayName("cancel()")
+    class Cancel {
+
+        @Nested
+        @DisplayName("정상 케이스")
+        class Success {
+
+            @Test
+            public void 확정된_주문을_취소하면_CANCELLED가_된다() {
+                //given
+                Order order = createOrder();
+                UUID deliveryId = UUID.randomUUID();
+                order.confirm(deliveryId);
+
+                //when
+                order.cancel();
+
+                //then
+                assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+                assertThat(order.getDeliveryId()).isEqualTo(deliveryId);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("isCancelable()")
+    class IsCancelable {
+
+        @Test
+        public void 확정된_주문은_취소_가능하다() {
+            //given
+            Order order = createOrder();
+            order.confirm(UUID.randomUUID());
+
+            //when, then
+            assertThat(order.isCancelable()).isTrue();
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = OrderStatus.class, names = "CONFIRMED", mode = EnumSource.Mode.EXCLUDE)
+        public void CONFIRMED가_아닌_주문은_취소_불가하다(OrderStatus status) {
+            //given
+            Order order = createOrder();
+            ReflectionTestUtils.setField(order, "orderStatus", status);
+
+            //when, then
+            assertThat(order.isCancelable()).isFalse();
+        }
+    }
+
+    @Nested
     @DisplayName("softDelete()")
     class SoftDelete {
 

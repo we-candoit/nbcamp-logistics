@@ -3,7 +3,6 @@ package logistics.order.domain.entity;
 
 import jakarta.persistence.*;
 import logistics.order.common.entity.BaseEntity;
-import logistics.order.domain.enums.OrderItemStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -15,11 +14,7 @@ import java.util.UUID;
 public class OrderItem extends BaseEntity {
 
     @Id
-    private UUID id = UUID.randomUUID();
-
-    @Enumerated(EnumType.STRING)
-    @Column(length = 30, nullable = false)
-    private OrderItemStatus orderItemStatus = OrderItemStatus.ORDERED;
+    private final UUID id = UUID.randomUUID();
 
     @Column(nullable = false, updatable = false)
     private UUID itemId;

@@ -3,6 +3,7 @@ package logistics.order.presentation.controller;
 import jakarta.validation.Valid;
 import logistics.order.application.service.OrderService;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
+import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
 import logistics.order.presentation.dto.response.OrderDetailResponse;
 import logistics.order.presentation.dto.response.OrderListResponse;
@@ -39,5 +40,10 @@ public class OrderController {
     @GetMapping
     public ResponseEntity<OrderListResponse> getOrdersByStatus(@RequestParam(required = false) String status) {
         return ResponseEntity.ok(orderService.getOrdersByStatus(status));
+    }
+
+    @PostMapping("/{orderId}/cancel")
+    public ResponseEntity<CancelOrderResponse> cancelOrderById(@PathVariable UUID orderId) {
+        return ResponseEntity.ok(orderService.cancelOrderById(orderId));
     }
 }
