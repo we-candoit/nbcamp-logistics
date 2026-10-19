@@ -19,7 +19,8 @@ import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
-import logistics.order.presentation.dto.response.GetOrderByIdResponse;
+import logistics.order.presentation.dto.response.OrderDetailResponse;
+import logistics.order.presentation.dto.response.OrderListResponse;
 import logistics.order.presentation.exception.CustomException;
 import logistics.order.presentation.exception.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
@@ -35,6 +36,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -376,7 +378,7 @@ class OrderServiceTest {
             given(orderTransactionService.findOrderItemWithOrder(orderId)).willReturn(orderItem);
 
             //when
-            GetOrderByIdResponse response = orderService.getOrderById(orderId);
+            OrderDetailResponse response = orderService.getOrderById(orderId);
 
             //then
             assertThat(response.getOrderId()).isEqualTo(orderId);
@@ -431,6 +433,130 @@ class OrderServiceTest {
             //when, then
             assertThatThrownBy(() -> orderService.getOrderById(orderId))
                     .satisfies(e -> assertErrorCode(e, ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+    }
+
+    @Nested
+    @DisplayName("getOrdersByStatus()")
+    class GetOrdersByStatus {
+
+        private OrderItem confirmedOrderItem() {
+            Order order = new Order(userId, requesterId, requesterHubId, "서울시 강남구 테헤란로 1", null);
+            order.confirm(deliveryId);
+            return new OrderItem(itemId, "생수 2L", price, quantity, supplierHubId, supplierId, order);
+        }
+
+        @Nested
+        @DisplayName("정상 케이스")
+        class Success {
+
+            @Test
+            public void MASTER는_유저_조건_없이_전체_주문을_조회한다() {
+                //given
+                loginAs("MASTER");
+                OrderItem orderItem = confirmedOrderItem();
+                given(orderTransactionService.findOrderItemsWithOrder(null, null)).willReturn(List.of(orderItem));
+
+                //when
+                OrderListResponse response = orderService.getOrdersByStatus(null);
+
+                //then
+                assertThat(response.getOrders()).hasSize(1);
+                assertThat(response.getOrders().getFirst().getOrderId()).isEqualTo(orderItem.getOrder().getId());
+                verify(orderTransactionService).findOrderItemsWithOrder(null, null);
+            }
+
+            @Test
+            public void MASTER가_상태를_지정하면_해당_상태로_조회한다() {
+                //given
+                loginAs("MASTER");
+                given(orderTransactionService.findOrderItemsWithOrder(null, OrderStatus.CONFIRMED)).willReturn(List.of());
+
+                //when
+                orderService.getOrdersByStatus("CONFIRMED");
+
+                //then
+                verify(orderTransactionService).findOrderItemsWithOrder(null, OrderStatus.CONFIRMED);
+            }
+
+            @Test
+            public void 일반_유저는_본인_주문만_조회한다() {
+                //given
+                loginAs("COMPANY_MANAGER");
+                given(orderTransactionService.findOrderItemsWithOrder(userId, null)).willReturn(List.of());
+
+                //when
+                orderService.getOrdersByStatus(null);
+
+                //then
+                verify(orderTransactionService).findOrderItemsWithOrder(userId, null);
+            }
+
+            @Test
+            public void 일반_유저가_상태를_지정하면_본인의_해당_상태_주문만_조회한다() {
+                //given
+                loginAs("COMPANY_MANAGER");
+                given(orderTransactionService.findOrderItemsWithOrder(userId, OrderStatus.WAITING)).willReturn(List.of());
+
+                //when
+                orderService.getOrdersByStatus("WAITING");
+
+                //then
+                verify(orderTransactionService).findOrderItemsWithOrder(userId, OrderStatus.WAITING);
+            }
+
+            @Test
+            public void 상태가_빈_문자열이면_전체_상태로_조회한다() {
+                //given
+                loginAs("MASTER");
+                given(orderTransactionService.findOrderItemsWithOrder(null, null)).willReturn(List.of());
+
+                //when
+                orderService.getOrdersByStatus(" ");
+
+                //then
+                verify(orderTransactionService).findOrderItemsWithOrder(null, null);
+            }
+
+            @Test
+            public void 조회된_주문이_없으면_빈_목록을_반환한다() {
+                //given
+                loginAs("MASTER");
+                given(orderTransactionService.findOrderItemsWithOrder(null, null)).willReturn(List.of());
+
+                //when
+                OrderListResponse response = orderService.getOrdersByStatus(null);
+
+                //then
+                assertThat(response.getOrders()).isEmpty();
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스")
+        class Failure {
+
+            @Test
+            public void 존재하지_않는_상태면_C400_예외가_발생하고_조회하지_않는다() {
+                //given
+                loginAs("MASTER");
+
+                //when, then
+                assertThatThrownBy(() -> orderService.getOrdersByStatus("SHIPPING"))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
+                verifyNoInteractions(orderTransactionService);
+            }
+
+            @Test
+            public void 소문자_상태는_유효하지_않은_상태로_처리한다() {
+                //given
+                loginAs("MASTER");
+
+                //when, then
+                assertThatThrownBy(() -> orderService.getOrdersByStatus("confirmed"))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
+                verifyNoInteractions(orderTransactionService);
+            }
         }
     }
 }

@@ -24,11 +24,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -263,6 +266,168 @@ class OrderTransactionServiceTest {
                     .isInstanceOf(CustomException.class)
                     .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
                             .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+    }
+
+    @Nested
+    @DisplayName("findOrderItemsWithOrder()")
+    class FindOrderItemsWithOrder {
+
+        private final UUID otherUserId = UUID.randomUUID();
+        private Order myConfirmed;
+        private Order myWaiting;
+        private Order otherConfirmed;
+
+        //내 주문(CONFIRMED, WAITING) + 다른 유저 주문(CONFIRMED) + 삭제된 주문
+        @BeforeEach
+        void setUpOrders() {
+            myConfirmed = orderOf(userId, true);
+            myWaiting = orderOf(userId, false);
+            otherConfirmed = orderOf(otherUserId, true);
+
+            Order deleted = orderOf(userId, true);
+            deleted.softDelete(userId);
+
+            em.flush();
+            em.clear();
+        }
+
+        //confirm 여부로 상태 결정 / WAITING은 deliveryId가 없어 DB 저장 불가 → 테스트에서만 세팅
+        private Order orderOf(UUID orderUserId, boolean confirmed) {
+            Order order = new Order(orderUserId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
+            order.confirm(UUID.randomUUID());
+            if (!confirmed) {
+                ReflectionTestUtils.setField(order, "orderStatus", OrderStatus.WAITING);
+            }
+            orderTransactionService.save(order, orderItem(order));
+            return order;
+        }
+
+        private List<UUID> orderIds(List<OrderItem> orderItems) {
+            return orderItems.stream().map(orderItem -> orderItem.getOrder().getId()).toList();
+        }
+
+        @Nested
+        @DisplayName("정렬")
+        class Sorting {
+
+            private Order myConfirmedLatest;
+
+            //생성시각이 거의 같아 순서가 불안정 → DB의 created_at을 날짜로 직접 지정
+            //myConfirmed(10/01) < myWaiting(10/02) < otherConfirmed(10/03) < myConfirmedLatest(10/04)
+            @BeforeEach
+            void setUpCreatedAt() {
+                myConfirmedLatest = orderOf(userId, true);
+                em.flush();
+
+                setCreatedAt(myConfirmed, LocalDateTime.of(2026, 10, 1, 12, 0));
+                setCreatedAt(myWaiting, LocalDateTime.of(2026, 10, 2, 12, 0));
+                setCreatedAt(otherConfirmed, LocalDateTime.of(2026, 10, 3, 12, 0));
+                setCreatedAt(myConfirmedLatest, LocalDateTime.of(2026, 10, 4, 12, 0));
+                em.clear();
+            }
+
+            //createdAt은 updatable = false라 엔티티로는 변경 불가 → native query로 변경
+            private void setCreatedAt(Order order, LocalDateTime createdAt) {
+                em.createNativeQuery("update p_order set created_at = :createdAt where id = :id")
+                        .setParameter("createdAt", createdAt)
+                        .setParameter("id", order.getId())
+                        .executeUpdate();
+            }
+
+            @Test
+            public void 전체_주문은_최신순으로_조회된다() {
+                //when
+                List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(null, null);
+
+                //then
+                assertThat(orderIds(result)).containsExactly(
+                        myConfirmedLatest.getId(), otherConfirmed.getId(), myWaiting.getId(), myConfirmed.getId());
+            }
+
+            @Test
+            public void 상태별_주문은_최신순으로_조회된다() {
+                //when
+                List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(null, OrderStatus.CONFIRMED);
+
+                //then
+                assertThat(orderIds(result)).containsExactly(
+                        myConfirmedLatest.getId(), otherConfirmed.getId(), myConfirmed.getId());
+            }
+
+            @Test
+            public void 유저별_주문은_최신순으로_조회된다() {
+                //when
+                List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(userId, null);
+
+                //then
+                assertThat(orderIds(result)).containsExactly(
+                        myConfirmedLatest.getId(), myWaiting.getId(), myConfirmed.getId());
+            }
+
+            @Test
+            public void 유저와_상태별_주문은_최신순으로_조회된다() {
+                //when
+                List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(userId, OrderStatus.CONFIRMED);
+
+                //then
+                assertThat(orderIds(result)).containsExactly(myConfirmedLatest.getId(), myConfirmed.getId());
+            }
+        }
+
+        @Test
+        public void 조건이_없으면_삭제되지_않은_전체_주문을_조회한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(null, null);
+
+            //then
+            assertThat(orderIds(result))
+                    .containsExactlyInAnyOrder(myConfirmed.getId(), myWaiting.getId(), otherConfirmed.getId());
+        }
+
+        @Test
+        public void 상태만_지정하면_해당_상태의_전체_주문을_조회한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(null, OrderStatus.CONFIRMED);
+
+            //then
+            assertThat(orderIds(result)).containsExactlyInAnyOrder(myConfirmed.getId(), otherConfirmed.getId());
+        }
+
+        @Test
+        public void 유저만_지정하면_해당_유저의_주문만_조회한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(userId, null);
+
+            //then
+            assertThat(orderIds(result)).containsExactlyInAnyOrder(myConfirmed.getId(), myWaiting.getId());
+        }
+
+        @Test
+        public void 유저와_상태를_지정하면_해당_유저의_해당_상태_주문만_조회한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(userId, OrderStatus.WAITING);
+
+            //then
+            assertThat(orderIds(result)).containsExactly(myWaiting.getId());
+        }
+
+        @Test
+        public void 조회된_주문상품의_주문은_fetch_join으로_함께_로딩된다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(null, null);
+
+            //then
+            assertThat(result).allMatch(orderItem -> Hibernate.isInitialized(orderItem.getOrder()));
+        }
+
+        @Test
+        public void 조건에_맞는_주문이_없으면_빈_목록을_반환한다() {
+            //when
+            List<OrderItem> result = orderTransactionService.findOrderItemsWithOrder(otherUserId, OrderStatus.WAITING);
+
+            //then
+            assertThat(result).isEmpty();
         }
     }
 
