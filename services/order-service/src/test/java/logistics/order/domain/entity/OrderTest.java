@@ -62,6 +62,17 @@ class OrderTest {
             }
 
             @Test
+            public void 생성_직후에는_삭제되지_않은_상태다() {
+                //when
+                Order order = createOrder();
+
+                //then
+                assertThat(order.isDeleted()).isFalse();
+                assertThat(order.getDeletedAt()).isNull();
+                assertThat(order.getDeletedBy()).isNull();
+            }
+
+            @Test
             public void 저장_전에_ID가_생성되고_주문마다_다르다() {
                 //when
                 Order order1 = createOrder();
@@ -295,38 +306,113 @@ class OrderTest {
     }
 
     @Nested
-    @DisplayName("softDelete()")
-    class SoftDelete {
+    @DisplayName("isDeletable()")
+    class IsDeletable {
+
+        @Test
+        public void 취소된_주문은_삭제_가능하다() {
+            //given
+            Order order = createOrder();
+            ReflectionTestUtils.setField(order, "orderStatus", OrderStatus.CANCELLED);
+
+            //when, then
+            assertThat(order.isDeletable()).isTrue();
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = OrderStatus.class, names = "CANCELLED", mode = EnumSource.Mode.EXCLUDE)
+        public void CANCELLED가_아닌_주문은_삭제_불가하다(OrderStatus status) {
+            //given
+            Order order = createOrder();
+            ReflectionTestUtils.setField(order, "orderStatus", status);
+
+            //when, then
+            assertThat(order.isDeletable()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("delete()")
+    class Delete {
+
+        private Order cancelledOrder() {
+            Order order = createOrder();
+            order.confirm(UUID.randomUUID());
+            order.cancel();
+            return order;
+        }
 
         @Nested
         @DisplayName("정상 케이스")
         class Success {
 
             @Test
-            public void 생성_직후에는_삭제되지_않은_상태다() {
-                //when
-                Order order = createOrder();
-
-                //then
-                assertThat(order.isDeleted()).isFalse();
-                assertThat(order.getDeletedAt()).isNull();
-                assertThat(order.getDeletedBy()).isNull();
-            }
-
-            @Test
-            public void 삭제하면_삭제일시와_삭제자가_기록된다() {
+            public void 취소된_주문을_삭제하면_삭제일시와_삭제자가_기록된다() {
                 //given
-                Order order = createOrder();
+                Order order = cancelledOrder();
                 UUID userId = UUID.randomUUID();
 
                 //when
-                order.softDelete(userId);
+                order.delete(userId);
 
                 //then
                 assertThat(order.isDeleted()).isTrue();
                 assertThat(order.getDeletedAt()).isNotNull();
                 assertThat(order.getDeletedBy()).isEqualTo(userId);
+                assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
             }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스")
+        class Failure {
+
+            @ParameterizedTest
+            @EnumSource(value = OrderStatus.class, names = "CANCELLED", mode = EnumSource.Mode.EXCLUDE)
+            public void CANCELLED가_아닌_주문을_삭제하면_C409_예외가_발생하고_삭제되지_않는다(OrderStatus status) {
+                //given
+                Order order = createOrder();
+                ReflectionTestUtils.setField(order, "orderStatus", status);
+
+                //when, then
+                assertThatThrownBy(() -> order.delete(UUID.randomUUID()))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_INVALID_ORDER_STATUS));
+                assertThat(order.isDeleted()).isFalse();
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("revertDelete()")
+    class RevertDelete {
+
+        @Test
+        public void 삭제를_되돌리면_삭제일시와_삭제자가_비워진다() {
+            //given
+            Order order = createOrder();
+            order.confirm(UUID.randomUUID());
+            order.cancel();
+            order.delete(UUID.randomUUID());
+
+            //when
+            order.revertDelete();
+
+            //then
+            assertThat(order.isDeleted()).isFalse();
+            assertThat(order.getDeletedAt()).isNull();
+            assertThat(order.getDeletedBy()).isNull();
+        }
+
+        @Test
+        public void 삭제되지_않은_상태면_예외_없이_그대로다() {
+            //given
+            Order order = createOrder();
+
+            //when
+            order.revertDelete();
+
+            //then
+            assertThat(order.isDeleted()).isFalse();
         }
     }
 }

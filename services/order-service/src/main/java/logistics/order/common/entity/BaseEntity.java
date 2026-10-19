@@ -46,12 +46,21 @@ public abstract class BaseEntity implements Persistable<UUID> {
         return createdAt == null;
     }
 
-    public void softDelete(UUID userId) {
+    public boolean isDeleted() { return deletedAt != null; }
+
+    protected void softDelete(UUID userId) {
         this.deletedAt = LocalDateTime.now();
         this.deletedBy = userId;
     }
 
-    public boolean isDeleted() {
-        return deletedAt != null;
+    //softDelete 되돌리기 / deletedAt, deletedBy를 비워 삭제 전 상태로 복구 (보상처리에서 사용)
+    //삭제되지 않은 경우 예외 없이 무시 (보상 중 예외가 발생하면 원래 실패 원인이 가려지므로)
+    public void revertDelete() {
+        if (!isDeleted()) {
+            return;
+        }
+
+        this.deletedAt = null;
+        this.deletedBy = null;
     }
 }

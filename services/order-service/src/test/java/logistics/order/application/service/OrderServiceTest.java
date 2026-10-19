@@ -695,6 +695,200 @@ class OrderServiceTest {
     }
 
     @Nested
+    @DisplayName("deleteOrderById()")
+    class DeleteOrderById {
+
+        private final Request request = Request.create(Request.HttpMethod.DELETE, "http://delivery-service",
+                Map.of(), null, StandardCharsets.UTF_8, null);
+
+        //주문삭제(검증 포함) → 배송삭제 성공까지 정상 동작하는 상황
+        private Order givenDeletableOrder() {
+            Order order = new Order(userId, requesterId, requesterHubId, "서울시 강남구 테헤란로 1", null);
+            order.confirm(deliveryId);
+            order.cancel();
+            given(orderTransactionService.delete(order.getId(), userId)).willAnswer(invocation -> {
+                order.delete(userId);
+                return order;
+            });
+            return order;
+        }
+
+        @Nested
+        @DisplayName("정상 케이스")
+        class Success {
+
+            @Test
+            public void 주문을_삭제하면_배송삭제를_요청한다() {
+                //given
+                loginAs("COMPANY_MANAGER");
+                Order order = givenDeletableOrder();
+
+                //when
+                orderService.deleteOrderById(order.getId());
+
+                //then
+                verify(orderTransactionService).delete(order.getId(), userId);
+                verify(deliveryServiceClient).deleteDelivery(deliveryId);
+            }
+
+            @Test
+            public void 주문을_먼저_삭제한_뒤_배송삭제를_요청한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenDeletableOrder();
+                InOrder inOrder = inOrder(orderTransactionService, deliveryServiceClient);
+
+                //when
+                orderService.deleteOrderById(order.getId());
+
+                //then
+                inOrder.verify(orderTransactionService).delete(order.getId(), userId);
+                inOrder.verify(deliveryServiceClient).deleteDelivery(deliveryId);
+            }
+
+            @Test
+            public void 배송삭제에_성공하면_보상처리를_하지_않는다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenDeletableOrder();
+
+                //when
+                orderService.deleteOrderById(order.getId());
+
+                //then
+                verify(orderTransactionService, never()).compensateDeleteOrder(any());
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스 - 주문삭제 단계")
+        class DeleteFailure {
+
+            //주문삭제(조회/권한/상태 검증) 단계에서 실패하면 배송삭제와 보상처리 모두 하지 않음
+            private void assertNoDeliveryCallAndNoCompensation() {
+                verifyNoInteractions(deliveryServiceClient);
+                verify(orderTransactionService, never()).compensateDeleteOrder(any());
+            }
+
+            @Test
+            public void 없는_주문이면_C404_예외가_전달된다() {
+                //given
+                loginAs("MASTER");
+                UUID orderId = UUID.randomUUID();
+                given(orderTransactionService.delete(orderId, userId))
+                        .willThrow(new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.deleteOrderById(orderId))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C404_ORDER_NOT_FOUND));
+                assertNoDeliveryCallAndNoCompensation();
+            }
+
+            @Test
+            public void 다른_사람의_주문이면_C403_예외가_전달된다() {
+                //given
+                loginAs("COMPANY_MANAGER");
+                UUID orderId = UUID.randomUUID();
+                given(orderTransactionService.delete(orderId, userId))
+                        .willThrow(new CustomException(ErrorCode.C403_FORBIDDEN_ORDER));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.deleteOrderById(orderId))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_ORDER));
+                assertNoDeliveryCallAndNoCompensation();
+            }
+
+            @Test
+            public void 취소되지_않은_주문이면_C409_예외가_전달된다() {
+                //given
+                loginAs("MASTER");
+                UUID orderId = UUID.randomUUID();
+                given(orderTransactionService.delete(orderId, userId))
+                        .willThrow(new CustomException(ErrorCode.C409_INVALID_ORDER_STATUS));
+
+                //when, then
+                assertThatThrownBy(() -> orderService.deleteOrderById(orderId))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_INVALID_ORDER_STATUS));
+                assertNoDeliveryCallAndNoCompensation();
+            }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스 - 배송삭제 단계 (보상처리)")
+        class DeliveryFailure {
+
+            @Test
+            public void 배송이_취소되지_않아_409로_응답하면_삭제불가_예외가_발생하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenDeletableOrder();
+                willThrow(new FeignException.Conflict("취소된 배송만 삭제할 수 있습니다.", request, null, null))
+                        .given(deliveryServiceClient).deleteDelivery(deliveryId);
+
+                //when, then
+                assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_DELETABLE));
+                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+            }
+
+            @Test
+            public void 배송이_없어_404로_응답하면_삭제불가_예외가_발생하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenDeletableOrder();
+                willThrow(new FeignException.NotFound("해당 배송을 찾을 수 없습니다.", request, null, null))
+                        .given(deliveryServiceClient).deleteDelivery(deliveryId);
+
+                //when, then
+                assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_DELETABLE));
+                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+            }
+
+            @Test
+            public void 배송서비스가_5xx로_응답하면_FeignException을_그대로_전달하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenDeletableOrder();
+                willThrow(feignException()).given(deliveryServiceClient).deleteDelivery(deliveryId);
+
+                //when, then
+                assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
+                        .isInstanceOf(FeignException.InternalServerError.class);
+                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+            }
+
+            @Test
+            public void 배송서비스가_응답하지_않으면_FeignException을_그대로_전달하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenDeletableOrder();
+                willThrow(new RetryableException(-1, "Read timed out", Request.HttpMethod.DELETE, (Long) null, request))
+                        .given(deliveryServiceClient).deleteDelivery(deliveryId);
+
+                //when, then
+                assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
+                        .isInstanceOf(RetryableException.class);
+                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+            }
+
+            @Test
+            public void 그_외_예외가_발생해도_예외를_그대로_전달하고_주문을_복구한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenDeletableOrder();
+                willThrow(new IllegalStateException("circuit open"))
+                        .given(deliveryServiceClient).deleteDelivery(deliveryId);
+
+                //when, then
+                assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
+                        .isInstanceOf(IllegalStateException.class);
+                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("getOrdersByStatus()")
     class GetOrdersByStatus {
 

@@ -76,6 +76,20 @@ public class Order extends BaseEntity {
         this.orderStatus = OrderStatus.CANCELLED;
     }
 
+    //주문삭제 가능 여부 / 취소된(CANCELLED) 주문만 가능 (배송 서비스도 취소된 배송만 삭제 허용)
+    public boolean isDeletable() {
+        return this.orderStatus == OrderStatus.CANCELLED;
+    }
+
+    //주문삭제, CANCELLED 상태에서만 가능
+    public void delete(UUID userId) {
+        if (!isDeletable()) {
+            throw new CustomException(ErrorCode.C409_INVALID_ORDER_STATUS);
+        }
+
+        softDelete(userId);
+    }
+
     //주문취소 보상, CANCELLED 상태만 CONFIRMED로 복구
     //보상 중 예외가 발생하면 원래 실패 원인이 가려지므로 예외 없이 무시
     public void revertCancel() {

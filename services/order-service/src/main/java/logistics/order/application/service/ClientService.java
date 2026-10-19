@@ -65,4 +65,18 @@ public class ClientService {
             throw e;
         }
     }
+
+    //배송삭제 요청 / 배송이 삭제되지 않으면 주문도 삭제 불가
+    public void deleteDelivery(UUID deliveryId) {
+        try {
+            deliveryServiceClient.deleteDelivery(deliveryId);
+        } catch (FeignException e) {
+            //배송 서비스가 4xx로 응답 (409 취소되지 않은 배송, 404 배송 없음 등) → 삭제 불가
+            if (e.status() >= 400 && e.status() < 500) {
+                throw new CustomException(ErrorCode.C409_ORDER_NOT_DELETABLE);
+            }
+            //응답 없음(-1), 5xx는 전역 처리기로 전달
+            throw e;
+        }
+    }
 }

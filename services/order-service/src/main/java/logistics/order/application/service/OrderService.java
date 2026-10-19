@@ -90,6 +90,19 @@ public class OrderService {
         return CancelOrderResponse.from(order);
     }
 
+    //주문ID로 주문삭제 / 취소된(CANCELLED) 주문만 가능, 배송삭제에 실패하면 주문삭제 복구
+    public void deleteOrderById(UUID orderId) {
+        Order order = orderTransactionService.delete(orderId, AuthContext.getUserId());
+
+        try {
+            clientService.deleteDelivery(order.getDeliveryId());
+        } catch (RuntimeException e) {
+            //배송삭제 실패시 주문/주문상품 삭제를 되돌리는 보상시나리오
+            orderTransactionService.compensateDeleteOrder(orderId);
+            throw e;
+        }
+    }
+
     private OrderItem buildOrderItem(CreateOrderRequest request, FetchCompanyByIdResponse supplierCompany,
                                       FetchItemByIdResponse item, Order order) {
         return new OrderItem(
