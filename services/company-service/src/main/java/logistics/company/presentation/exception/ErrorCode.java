@@ -36,6 +36,8 @@ public enum ErrorCode {
     HUB_NOT_FOUND(404, "존재하지 않는 허브입니다."),
 
     // 상품
+    ITEM_NAME_ALREADY_EXISTS(409, "같은 업체에 이미 존재하는 상품명입니다."),
+    ITEM_FORBIDDEN(403, "상품 관리 권한이 없습니다."),
     ITEM_NOT_FOUND(404, "상품을 찾을 수 없습니다."),
     ITEM_HAS_ACTIVE_ORDERS(409, "진행 중인 주문이 있어 상품을 삭제할 수 없습니다."),
     ITEM_HAS_REMAINING_STOCK(409, "재고가 남아 있어 상품을 삭제할 수 없습니다.");
