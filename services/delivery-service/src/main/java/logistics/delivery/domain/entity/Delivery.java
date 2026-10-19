@@ -2,7 +2,9 @@ package logistics.delivery.domain.entity;
 
 import jakarta.persistence.*;
 import logistics.delivery.common.entity.BaseEntity;
+import logistics.delivery.domain.enums.DeliveryRouteStatus;
 import logistics.delivery.domain.enums.DeliveryStatus;
+import logistics.delivery.domain.enums.RouteType;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -105,5 +107,60 @@ public class Delivery extends BaseEntity {
         }
 
         this.managerId = managerId;
+    }
+
+    // 배송 경로 유형과 변경된 상태를 기준으로 배송 전체 상태 업데이트
+    public void updateStatusByRoute(RouteType routeType, DeliveryRouteStatus routeStatus){
+        if(getDeletedAt() != null){
+            throw new IllegalStateException("삭제된 배송은 상태를 변경할 수 없습니다.");
+        }
+
+        if (routeType == null || routeStatus == null) {
+            throw new IllegalArgumentException("배송 경로 유형과 상태가 필요합니다.");
+        }
+
+        // 배송의 다음 상태를 결정
+        DeliveryStatus nextStatus = switch (routeType) {
+            case HUB_TO_HUB ->
+                    switch (routeStatus) {
+                        case IN_TRANSIT -> DeliveryStatus.HUB_IN_TRANSIT;
+                        case ARRIVED -> DeliveryStatus.HUB_ARRIVED;
+                        default -> throw new IllegalArgumentException("지원하지 않는 배송 경로 상태입니다.");
+            };
+
+            case HUB_TO_COMPANY ->
+                    switch (routeStatus) {
+                        case IN_TRANSIT -> DeliveryStatus.COMPANY_IN_TRANSIT;
+                        case ARRIVED -> DeliveryStatus.DELIVERED;
+                        default -> throw new IllegalArgumentException("지원하지 않는 배송 경로 상태입니다.");
+            };
+        };
+
+        boolean sameHub = departureHubId.equals(destinationHubId);
+
+        // 현재 상태를 검사한 뒤 조건에 충족 시 상태 변경
+        boolean allowed = switch (nextStatus) {
+            case HUB_IN_TRANSIT ->
+                    !sameHub && status == DeliveryStatus.WAITING;
+
+            case HUB_ARRIVED ->
+                    !sameHub && status == DeliveryStatus.HUB_IN_TRANSIT;
+
+            case COMPANY_IN_TRANSIT ->
+                    sameHub
+                            ? status == DeliveryStatus.WAITING
+                            : status == DeliveryStatus.HUB_ARRIVED;
+
+            case DELIVERED ->
+                    status == DeliveryStatus.COMPANY_IN_TRANSIT;
+
+            default -> false;
+        };
+
+        if (!allowed) {
+            throw new IllegalStateException("현재 배송 상태에서는 해당 상태로 변경할 수 없습니다.");
+        }
+
+        status = nextStatus;
     }
 }

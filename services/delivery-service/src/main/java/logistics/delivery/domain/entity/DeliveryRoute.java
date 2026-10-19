@@ -99,4 +99,34 @@ public class DeliveryRoute extends BaseEntity {
         }
         this.managerId = managerId;
     }
+
+    // // 배송 경로 상태 변경: 실제 변경 시 true, 동일 상태 요청 시 false 반환
+    public boolean updateStatus(DeliveryRouteStatus nextStatus){
+        if(nextStatus != DeliveryRouteStatus.IN_TRANSIT
+                && nextStatus != DeliveryRouteStatus.ARRIVED){
+            throw new IllegalArgumentException("배송 경로 상태는 IN_TRANSIT 또는 ARRIVED로 요청해야 합니다.");
+        }
+
+        if(getDeletedAt() != null
+            || status == DeliveryRouteStatus.CANCELLED){
+            throw new IllegalStateException("삭제되거나 취소된 배송 경로는 상태를 변경할 수 없습니다.");
+        }
+
+        if(status == nextStatus) return false;  // 중복 요청
+
+        if (status == DeliveryRouteStatus.WAITING
+                && nextStatus == DeliveryRouteStatus.IN_TRANSIT){
+            if(managerId == null){
+                throw new IllegalStateException("담당자가 배정된 배송 경로만 출발할 수 있습니다.");
+            }
+        }
+        else if (!(status == DeliveryRouteStatus.IN_TRANSIT
+                && nextStatus == DeliveryRouteStatus.ARRIVED)){
+            throw new IllegalStateException("허용되지 않은 배송 경로 상태 변경입니다.");
+        }
+        status = nextStatus;
+        return true;
+    }
+
+
 }
