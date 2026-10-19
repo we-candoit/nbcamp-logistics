@@ -19,7 +19,8 @@ public interface DeliveryServiceClient {
     @PostMapping("/internal/deliveries/{id}/cancel")
     CancelDeliveryResponse cancelDelivery(@PathVariable("id") UUID deliveryId);
 
+    //성공 시 204 No Content / 이미 삭제된 배송이면 204 (멱등)
     @DeleteMapping("/internal/deliveries/{id}")
-    String deleteDelivery(@PathVariable("id")UUID deliveryId);
+    void deleteDelivery(@PathVariable("id") UUID deliveryId);
 
 }
