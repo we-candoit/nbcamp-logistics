@@ -43,12 +43,12 @@ public class DeliveryServiceImpl implements DeliveryService{
 
 
     /**
-     *
-     * @param request
-     * @param pageable
-     * @param userId
-     * @param role
-     * @return
+     * 배송 목록 조회 및 검색
+     * @param request 검색 조건
+     * @param pageable 페이징 처리 정보
+     * @param userId 배송 조회 범위를 확인할 요청자의 사용자ID
+     * @param role 권한
+     * @return 검색 조건, 조회 권한을 만족하는 배송 목록을 페이징 처리해서 반환
      */
     @Override
     public Page<DeliverySearchResponse> searchDeliveries(
