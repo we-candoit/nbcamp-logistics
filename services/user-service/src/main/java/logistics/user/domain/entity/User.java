@@ -1,7 +1,6 @@
 package logistics.user.domain.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotNull;
 import logistics.user.common.entity.BaseEntity;
 import logistics.user.domain.enums.AffiliationStatus;
 import logistics.user.domain.enums.AffiliationType;
@@ -45,7 +44,6 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 20)
     private UserRole role; // [USER, MASTER] 유저 권한
 
-    @NotNull
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AffiliationType affiliationType;  // [HUB,COMPANY] 어디 소속인지
