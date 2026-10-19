@@ -15,7 +15,6 @@ public interface OrderClient {
     OrderDetailResponse getOrderDetail(
             @PathVariable("id") UUID orderId,
             @RequestHeader("X-User-Id") UUID userId,
-            @RequestHeader("X-User-Name") String username,
             @RequestHeader("X-Role-Name") String role
     );
 }

@@ -7,20 +7,21 @@ import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
-public class AuditorAwareImpl implements AuditorAware<String> {
+public class AuditorAwareImpl implements AuditorAware<UUID> {
     @Override
-    public Optional<String> getCurrentAuditor() {
+    public Optional<UUID> getCurrentAuditor() {
         RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
 
         if (attributes == null) {
             return Optional.empty();
         }
 
-        Object username = attributes.getAttribute(AuthInterceptor.USER_HEADER, RequestAttributes.SCOPE_REQUEST);
+        Object userId = attributes.getAttribute(AuthInterceptor.USER_ID_HEADER, RequestAttributes.SCOPE_REQUEST);
 
-        if (username instanceof String value && !value.isBlank()) {
+        if (userId instanceof UUID value) {
             return Optional.of(value);
         }
 

@@ -22,14 +22,12 @@ public interface DeliveryService {
     DeliveryDetailResponse getDeliveryDetail(
             UUID deliveryId,
             UUID userId,
-            String username,
             String role
     );
 
     List<DeliveryRouteResponse> getDeliveryRoutes(
             UUID deliveryId,
             UUID userId,
-            String username,
             String role
     );
 

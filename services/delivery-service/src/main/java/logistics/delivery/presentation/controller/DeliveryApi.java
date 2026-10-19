@@ -47,10 +47,9 @@ public class DeliveryApi implements DeliveryApiSpec{
     @GetMapping("/{id}")
     public ResponseEntity<DeliveryDetailResponse> getDeliveryDetail(UUID deliveryId, HttpServletRequest request) {
         UUID userId = AuthInterceptor.getUserId(request);
-        String username = (String) request.getAttribute(AuthInterceptor.USER_HEADER);
         String role = (String) request.getAttribute(AuthInterceptor.ROLE_HEADER);
 
-        DeliveryDetailResponse response = deliveryService.getDeliveryDetail(deliveryId, userId, username, role);
+        DeliveryDetailResponse response = deliveryService.getDeliveryDetail(deliveryId, userId, role);
         return ResponseEntity.ok(response);
     }
 
@@ -58,10 +57,9 @@ public class DeliveryApi implements DeliveryApiSpec{
     @GetMapping("/{id}/routes")
     public ResponseEntity<List<DeliveryRouteResponse>> getDeliveryRoutes(UUID deliveryId, HttpServletRequest request) {
         UUID userId = AuthInterceptor.getUserId(request);
-        String username = (String) request.getAttribute(AuthInterceptor.USER_HEADER);
         String role = (String) request.getAttribute(AuthInterceptor.ROLE_HEADER);
 
-        List<DeliveryRouteResponse> responses = deliveryService.getDeliveryRoutes(deliveryId, userId, username, role);
+        List<DeliveryRouteResponse> responses = deliveryService.getDeliveryRoutes(deliveryId, userId, role);
         return ResponseEntity.ok(responses);
     }
 
