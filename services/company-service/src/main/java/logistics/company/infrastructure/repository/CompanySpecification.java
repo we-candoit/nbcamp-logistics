@@ -1,12 +1,12 @@
 package logistics.company.infrastructure.repository;
 
+import jakarta.persistence.criteria.Predicate;
 import logistics.company.domain.entity.Company;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-import jakarta.persistence.criteria.Predicate;
 
 public final class CompanySpecification {       // 검색 조건 클래스
 

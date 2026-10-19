@@ -63,6 +63,11 @@ public class CompanyItemService {
 
     @Transactional(readOnly = true)
     public Page<CompanyItemResponse> searchItems(@Valid CompanyItemSearchCondition condition, Pageable pageable) {
+        // 최소 가격 > 최대 가격이면 400, 잘못된 범위는 조회하지 않음
+        if (condition.invalidPriceRange()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
         return companyItemRepository.findAll(
                 CompanyItemSpecification.search(
                         condition.getItemId(), condition.getCompanyId(),

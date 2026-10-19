@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -104,6 +105,14 @@ public class GlobalExceptionHandler {
         }
         // 그 외 무결성 위반 → 500
         return toResponse(ErrorCode.INTERNAL_SERVER_ERROR, request);
+    }
+
+    // 정렬 실패: 존재하지 않는 정렬 필드 (?sort=abc)
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ErrorResponse> handlePropertyReference(PropertyReferenceException e, HttpServletRequest request) {
+        List<ErrorResponse.FieldError> errors =
+                List.of(new ErrorResponse.FieldError("sort", "정렬할 수 없는 필드입니다: " + e.getPropertyName()));
+        return toResponse(ErrorCode.BAD_REQUEST, request, errors);
     }
 
     private boolean isConstraintViolation(DataIntegrityViolationException e, String constraintName) {

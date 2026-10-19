@@ -24,4 +24,9 @@ public class CompanyItemSearchCondition {
     private Long minPrice;                       // 최소 가격
 
     private Long maxPrice;                       // 최대 가격
+
+    // 최소 가격이 최대 가격보다 크면 잘못된 범위
+    public boolean invalidPriceRange() {
+        return minPrice != null && maxPrice != null && minPrice > maxPrice;
+    }
 }
