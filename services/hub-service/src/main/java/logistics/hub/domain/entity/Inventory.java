@@ -33,7 +33,7 @@ public class Inventory extends BaseEntity {
             Hub hub,
             UUID productId,
             Integer quantity,
-            String createdBy
+            UUID createdBy
     ) {
         super(createdBy);
 
