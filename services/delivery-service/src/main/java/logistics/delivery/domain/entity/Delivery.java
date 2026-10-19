@@ -80,4 +80,30 @@ public class Delivery extends BaseEntity {
             throw new IllegalStateException("취소된 배송만 삭제할 수 있습니다.");
         }
     }
+
+    // 담당자 배정 가능한 상태인지 검증
+    public void validateManagerAssignable(){
+        if(status != DeliveryStatus.WAITING
+                && status != DeliveryStatus.HUB_IN_TRANSIT
+                && status != DeliveryStatus.HUB_ARRIVED){
+            throw new IllegalStateException("현재 배송 상태에서는 담당자를 배정할 수 없습니다.");
+        }
+    }
+
+    // 담당자 배정
+    public void assignManager(UUID managerId){
+        validateManagerAssignable();
+
+        if(managerId == null){
+            throw new IllegalArgumentException("배정할 담당자 ID가 필요합니다.");
+        }
+
+        if(this.managerId != null){
+            if(this.managerId.equals(managerId)) return;
+
+            throw new IllegalStateException("이미 다른 담당자가 배정되어 있습니다.");
+        }
+
+        this.managerId = managerId;
+    }
 }

@@ -3,15 +3,19 @@ package logistics.delivery.application;
 import feign.FeignException;
 import logistics.delivery.domain.entity.Delivery;
 import logistics.delivery.domain.entity.DeliveryRoute;
+import logistics.delivery.domain.enums.DeliveryRouteStatus;
 import logistics.delivery.domain.enums.DeliveryStatus;
 import logistics.delivery.domain.enums.RouteType;
 import logistics.delivery.infrastructure.client.HubClient;
 import logistics.delivery.infrastructure.client.OrderClient;
+import logistics.delivery.infrastructure.client.UserClient;
 import logistics.delivery.infrastructure.client.dto.HubRouteResponse;
 import logistics.delivery.infrastructure.client.dto.OrderDetailResponse;
+import logistics.delivery.infrastructure.client.dto.UserDetailResponse;
 import logistics.delivery.infrastructure.repository.DeliveryRepository;
 import logistics.delivery.infrastructure.repository.DeliveryRouteRepository;
 import logistics.delivery.infrastructure.repository.DeliverySpecification;
+import logistics.delivery.presentation.dto.request.DeliveryAssignRequest;
 import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
 import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
 import logistics.delivery.presentation.dto.response.*;
@@ -37,9 +41,10 @@ public class DeliveryServiceImpl implements DeliveryService{
 
     private final DeliveryRepository deliveryRepository;
     private final DeliveryRouteRepository deliveryRouteRepository;
+    private final AuditorAware<String> auditorAware;
     private final HubClient hubClient;
     private final OrderClient orderClient;
-    private final AuditorAware<String> auditorAware;
+    private final UserClient userClient;
 
 
     /**
@@ -380,6 +385,124 @@ public class DeliveryServiceImpl implements DeliveryService{
         for(DeliveryRoute route : routes){
             route.delete(username, deletedAt);
         }
+    }
 
+    /**
+     * 배송 담당자 배정
+     * @param deliveryId 담당자를 배정할 배송
+     * @param routeId 담당자를 배정할 배송 경로
+     * @param request 배정할 담당자 ID가 있는 요청
+     * @param requesterId 배송 담당자 배정을 요청하는 MASTER의 사용자ID
+     * @param role 배정 요청자의 권한
+     * @return 배송 담당자 배정 응답
+     */
+    @Override
+    @Transactional
+    public DeliveryAssignResponse assignDeliveryManager(
+            UUID deliveryId, UUID routeId, DeliveryAssignRequest request, UUID requesterId, String role) {
+
+        if(!"MASTER".equals(role)){
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "배송 담당자 배정은 MASTER만 가능합니다.");
+        }
+
+        if(requesterId == null){
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "요청자 정보를 확인할 수 없습니다.");
+        }
+
+        Delivery delivery = deliveryRepository.findByIdAndDeletedAtIsNull(deliveryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송을 찾을 수 없습니다."));
+
+        DeliveryRoute route = deliveryRouteRepository.findByIdAndDeliveryIdAndDeletedAtIsNull(routeId, deliveryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송 경로를 찾을 수 없습니다."));
+
+        try {
+            delivery.validateManagerAssignable();
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        }
+
+        if (route.getStatus() != DeliveryRouteStatus.WAITING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "대기 중인 배송 경로에만 담당자를 배정할 수 있습니다.");
+        }
+
+        boolean sameRouteManager = request.managerId().equals(route.getManagerId());
+        boolean companyRoute = route.getType() == RouteType.HUB_TO_COMPANY;
+        boolean sameDeliveryManager = request.managerId().equals(delivery.getManagerId());
+
+        // 이미 담당자가 배정되어있고, 동일한 담당자로 재요청시 사용자API 호출 생략, 기존 결과 반환
+        if (sameRouteManager && (!companyRoute || sameDeliveryManager)) {
+            return DeliveryAssignResponse.from(route);
+        }
+
+        validateDeliveryManager(
+                request.managerId(),
+                route.getDepartureHubId(),
+                requesterId,
+                role
+        );
+
+        try {
+            route.assignManager(request.managerId());
+
+            if (route.getType() == RouteType.HUB_TO_COMPANY) {
+                delivery.assignManager(request.managerId());
+            }
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        }
+
+        return DeliveryAssignResponse.from(route);
+    }
+
+    /**
+     * 사용자 API를 호출해 배송 담당자 자격과 허브 소속을 검증하는 private 메서드
+     * @param managerId 베정할 배송 담당자의 사용자ID
+     * @param departureHubId 배정할 배송 경로의 출발 허브ID
+     * @param requesterId 배정을 요청한 MASTER의 사용자ID
+     * @param role 배정 요청자 권한
+     */
+    private void validateDeliveryManager(UUID managerId, UUID departureHubId, UUID requesterId, String role) {
+        UserDetailResponse user;
+
+        try {
+            user = userClient.getUserDetail(managerId, requesterId, role);
+        } catch (FeignException e) {
+            if (e.status() == 404) {
+                throw new ResponseStatusException(
+                        HttpStatus.valueOf(422), "배정할 사용자를 찾을 수 없습니다.");
+            }
+
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "사용자 정보를 확인할 수 없습니다.", e);
+        }
+
+        if (user == null
+                || !managerId.equals(user.userId())
+                || user.isDeliveryManager() == null
+                || user.affiliationType() == null
+                || user.affiliationStatus() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "사용자 서비스의 응답을 확인할 수 없습니다.");
+        }
+
+        if (!Boolean.TRUE.equals(user.isDeliveryManager())
+                || !"HUB".equals(user.affiliationType())
+                || !"CONFIRMED".equals(user.affiliationStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.valueOf(422), "소속이 확정된 허브 배송 담당자만 배정할 수 있습니다."
+            );
+        }
+
+        if (user.hubId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "사용자의 소속 허브 정보를 확인할 수 없습니다."
+            );
+        }
+
+        if (!departureHubId.equals(user.hubId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.valueOf(422), "배송 경로의 출발 허브에 소속된 담당자만 배정할 수 있습니다."
+            );
+        }
     }
 }

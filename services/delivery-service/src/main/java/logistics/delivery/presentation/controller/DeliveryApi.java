@@ -2,7 +2,9 @@ package logistics.delivery.presentation.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import logistics.delivery.application.DeliveryService;
+import logistics.delivery.presentation.dto.request.DeliveryAssignRequest;
 import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
+import logistics.delivery.presentation.dto.response.DeliveryAssignResponse;
 import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
 import logistics.delivery.presentation.dto.response.DeliveryRouteResponse;
 import logistics.delivery.presentation.dto.response.DeliverySearchResponse;
@@ -13,6 +15,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -65,5 +68,28 @@ public class DeliveryApi implements DeliveryApiSpec{
 
         List<DeliveryRouteResponse> responses = deliveryService.getDeliveryRoutes(deliveryId, userId, username, role);
         return ResponseEntity.ok(responses);
+    }
+
+    @Override
+    @PutMapping("/{deliveryId}/routes/{routeId}/assignee")
+    public ResponseEntity<DeliveryAssignResponse> assignDeliveryManager(
+            UUID deliveryId, UUID routeId, DeliveryAssignRequest assignRequest, HttpServletRequest request) {
+
+        UUID requesterId = AuthInterceptor.getUserId(request);
+
+        String role = (String) request.getAttribute(
+                AuthInterceptor.ROLE_HEADER
+        );
+
+        DeliveryAssignResponse response =
+                deliveryService.assignDeliveryManager(
+                        deliveryId,
+                        routeId,
+                        assignRequest,
+                        requesterId,
+                        role
+                );
+
+        return ResponseEntity.ok(response);
     }
 }

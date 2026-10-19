@@ -4,6 +4,7 @@ import logistics.delivery.domain.entity.DeliveryRoute;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface DeliveryRouteRepository extends JpaRepository<DeliveryRoute, UUID> {
@@ -16,4 +17,8 @@ public interface DeliveryRouteRepository extends JpaRepository<DeliveryRoute, UU
 
     // 삭제되지 않은 배송 경로를 순서대로 조회하는 메스드
     List<DeliveryRoute> findAllByDeliveryIdAndDeletedAtIsNullOrderBySequenceAsc(UUID deliveryId);
+
+    // 담당자를 배정할 경로가 해당 배송에 속하고, 배송 경로가 삭제되지 않았는지 확인하는 조회 메서드
+    Optional<DeliveryRoute> findByIdAndDeliveryIdAndDeletedAtIsNull(UUID routeId, UUID deliveryId);
+
 }
