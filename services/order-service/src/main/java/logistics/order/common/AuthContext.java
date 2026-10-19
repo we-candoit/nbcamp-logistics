@@ -1,7 +1,7 @@
 package logistics.order.common;
 
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import org.springframework.web.context.request.RequestContextHolder;
 
 import java.util.Optional;

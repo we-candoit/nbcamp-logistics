@@ -1,19 +1,12 @@
 package logistics.order.presentation;
 
-import ch.qos.logback.core.spi.ErrorCodes;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import logistics.order.common.AuthHeaders;
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
-import org.apache.commons.lang3.StringUtils;
-import org.springframework.http.HttpStatus;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import org.springframework.stereotype.Component;
-import org.springframework.web.method.HandlerMethod;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.HandlerInterceptor;
-
-import java.util.Optional;
 
 @Component
 public class AuthInterceptor implements HandlerInterceptor {

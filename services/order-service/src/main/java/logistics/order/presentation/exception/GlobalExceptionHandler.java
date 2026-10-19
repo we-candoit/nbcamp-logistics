@@ -1,6 +1,8 @@
 package logistics.order.presentation.exception;
 
 import feign.FeignException;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import logistics.order.presentation.dto.response.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
