@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import logistics.company.application.service.CompanyService;
 import logistics.company.presentation.dto.request.company.CompanyCreateRequest;
 import logistics.company.presentation.dto.request.company.CompanySearchCondition;
+import logistics.company.presentation.dto.request.company.CompanyUpdateRequest;
 import logistics.company.presentation.dto.response.CompanyResponse;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class CompanyController {
 
     private final CompanyService companyService;
+    public static final String USER_ID_HEADER = "X-User-Id";
     public static final String ROLE_HEADER = "X-Role-Name";
 
     @PostMapping("/api/companies")
@@ -47,5 +49,12 @@ public class CompanyController {
         return ResponseEntity.ok(companyService.getCompany(companyId));
     }
 
-
+    // 업체 수정
+    @PatchMapping("/api/companies/{companyId}")
+    public ResponseEntity<CompanyResponse> updateCompany(@PathVariable("companyId") UUID companyId,
+                                                         @RequestAttribute(USER_ID_HEADER) UUID userId,
+                                                         @RequestAttribute(ROLE_HEADER) String role,
+                                                         @Valid @RequestBody CompanyUpdateRequest request) {
+        return ResponseEntity.ok(companyService.updateCompany(companyId, userId, role, request));
+    }
 }
