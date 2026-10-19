@@ -22,7 +22,7 @@ public class UserService {
     private final UserRepository userRepository;
 
     // 내 정보 상세 조회 - 유저, 관리자 가능
-    public UserDetailResponse getMyProfile(UUID targetId, UUID requesterId, UserRole requesterRole) {
+    public UserDetailResponse getMyProfile(UUID requesterId, UUID targetId, UserRole requesterRole) {
 
         // 본인이거나 관리자만 조회 가능
         if (!targetId.equals(requesterId) && !requesterRole.equals(UserRole.MASTER)) {
@@ -48,5 +48,20 @@ public class UserService {
         }
 
         return responses;
+    }
+
+    // 유저 정보 수정
+    @Transactional
+    public UserDetailResponse updateUser(UUID requestorId, UUID targetId, String name, String email) {
+        if (!requestorId.equals(targetId)) {
+            throw new CustomException(ErrorCode.FORBIDDEN_NOT_OWNER);
+        }
+
+        User user = userRepository.findById(targetId).orElseThrow(
+                () -> new CustomException(ErrorCode.USER_NOT_FOUND)
+        );
+
+        user.updateProfile(name, email);
+        return new UserDetailResponse(user);
     }
 }

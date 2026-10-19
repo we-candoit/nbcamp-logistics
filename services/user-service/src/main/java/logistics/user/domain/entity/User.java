@@ -114,4 +114,13 @@ public class User extends BaseEntity {
     public boolean isNew() {
         return getCreatedAt() == null;
     }
+
+    public void updateProfile(String name, String email) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (email != null) {
+            this.email = email;
+        }
+    }
 }

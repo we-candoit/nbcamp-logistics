@@ -16,7 +16,7 @@ public enum ErrorCode {
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 존재하는 이메일입니다."),
     LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다."),
     DUPLICATE_SLACK_ID(HttpStatus.CONFLICT, "이미 존재하는 슬랙ID입니다."),
-    FORBIDDEN_NOT_OWNER(HttpStatus.FORBIDDEN, "본인의 정보만 조회할 수 있습니다."),
+    FORBIDDEN_NOT_OWNER(HttpStatus.FORBIDDEN, "본인의 정보만 접근할 수 있습니다."),
 
     // 허브명으로 검색 실패 시
     HUB_NOT_FOUND(HttpStatus.BAD_REQUEST, "존재하지 않는 허브입니다."),
