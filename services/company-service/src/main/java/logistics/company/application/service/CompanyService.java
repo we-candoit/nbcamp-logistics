@@ -93,6 +93,7 @@ public class CompanyService {
         return CompanyResponse.from(company);
     }
 
+    @Transactional
     public CompanyResponse updateCompany(UUID companyId, UUID userId, String role, @Valid CompanyUpdateRequest request) {
         // 1. 업체 조회 (없거나 삭제됐으면 404)
         Company company = companyRepository.findById(companyId)
