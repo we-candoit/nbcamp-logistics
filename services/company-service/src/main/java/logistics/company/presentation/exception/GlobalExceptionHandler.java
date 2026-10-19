@@ -20,6 +20,7 @@ import java.util.List;
 public class GlobalExceptionHandler {
 
     private static final String UK_COMPANY_MANAGER_ACTIVE = "uk_company_manager_active";
+    private static final String UK_COMPANY_ITEM_NAME_ACTIVE = "uk_company_item_name_active";
 
     // 업무 예외 처리: 리소스 없음(404), 권한 없음(403) 등
     @ExceptionHandler(BusinessException.class)
@@ -91,10 +92,15 @@ public class GlobalExceptionHandler {
             DataIntegrityViolationException e,
             HttpServletRequest request
     ) {
-        // 담당자 1인 1업체 인덱스 위반 → 409
+        // company: 담당자 1인 1업체 인덱스 위반 → 409
         if (isConstraintViolation(e, UK_COMPANY_MANAGER_ACTIVE)) {
             return handleBusinessException(
                     new BusinessException(ErrorCode.MANAGER_ALREADY_ASSIGNED), request);
+        }
+        // item: 같은 업체 내 상품명 중복 인덱스 위반 → 409
+        if (isConstraintViolation(e, UK_COMPANY_ITEM_NAME_ACTIVE)) {
+            return handleBusinessException(
+                    new BusinessException(ErrorCode.ITEM_NAME_ALREADY_EXISTS), request);
         }
         // 그 외 무결성 위반 → 500
         return toResponse(ErrorCode.INTERNAL_SERVER_ERROR, request);
