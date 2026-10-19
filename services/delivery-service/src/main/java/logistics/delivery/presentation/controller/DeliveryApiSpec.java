@@ -11,16 +11,112 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
 import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
 import logistics.delivery.presentation.dto.response.DeliveryRouteResponse;
+import logistics.delivery.presentation.dto.response.DeliverySearchResponse;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 import java.util.UUID;
 
 @Tag(name = "배송", description = "배송 및 배송 경로 관리 API")
 public interface DeliveryApiSpec {
+
+    @Operation(
+            summary = "배송 목록 조회 및 검색",
+            description = """
+                MASTER는 전체 배송을 조회합니다.
+                USER는 본인이 배송 또는 활성 구간 담당자인 배송만 조회합니다.
+                검색 조건은 선택값이며, 여러 조건은 AND로 적용합니다.
+                삭제된 배송은 제외합니다.
+                """
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "배송 목록 조회 성공"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "검색값, 페이지 또는 정렬 조건 오류",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "필수 사용자 정보 누락",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "허용되지 않은 권한",
+                    content = @Content
+            )
+    })
+    @Parameters({
+            @Parameter(
+                    name = "X-User-Id",
+                    in = ParameterIn.HEADER,
+                    required = true,
+                    description = "조회 요청자의 사용자 UUID",
+                    schema = @Schema(type = "string", format = "uuid")
+            ),
+            @Parameter(
+                    name = "X-User-Name",
+                    in = ParameterIn.HEADER,
+                    required = true,
+                    description = "조회 요청자의 username"
+            ),
+            @Parameter(
+                    name = "X-Role-Name",
+                    in = ParameterIn.HEADER,
+                    required = true,
+                    description = "조회 요청자의 역할",
+                    schema = @Schema(
+                            type = "string",
+                            allowableValues = {"USER", "MASTER"}
+                    )
+            )
+    })
+    ResponseEntity<Page<DeliverySearchResponse>> searchDeliveries(
+            @ParameterObject
+            @ModelAttribute DeliverySearchRequest searchRequest,
+
+            @Parameter(
+                    description = "페이지 번호, 0부터 시작",
+                    schema = @Schema(minimum = "0", defaultValue = "0")
+            )
+            @RequestParam(name = "page", defaultValue = "0") int page,
+
+            @Parameter(
+                    description = "페이지 크기, 1~100",
+                    schema = @Schema(
+                            minimum = "1",
+                            maximum = "100",
+                            defaultValue = "10"
+                    )
+            )
+            @RequestParam(name = "size", defaultValue = "10") int size,
+
+            @Parameter(
+                    description = """
+                        정렬 필드와 방향.
+                        필드: createdAt, updatedAt
+                        방향: asc, desc
+                        예: createdAt,desc
+                        """,
+                    schema = @Schema(defaultValue = "createdAt,desc")
+            )
+            @RequestParam(name = "sort", defaultValue = "createdAt,desc") String sort,
+
+            @Parameter(hidden = true)
+            HttpServletRequest request
+    );
 
     @Operation(
             summary = "배송 상세 조회",
