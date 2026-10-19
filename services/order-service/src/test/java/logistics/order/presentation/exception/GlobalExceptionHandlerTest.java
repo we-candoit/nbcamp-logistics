@@ -3,6 +3,8 @@ package logistics.order.presentation.exception;
 import feign.FeignException;
 import feign.Request;
 import feign.RetryableException;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import logistics.order.presentation.controller.OrderController;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.ErrorResponse;
