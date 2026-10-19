@@ -302,7 +302,7 @@ class GlobalExceptionHandlerTest {
         }
 
         @Test
-        public void 외부서비스가_에러로_응답하면_해당_상태코드로_응답한다() {
+        public void 외부서비스가_4xx로_응답하면_502로_응답한다() {
             //given
             FeignException e = new FeignException.NotFound("Not Found", request, null, null);
 
@@ -310,11 +310,13 @@ class GlobalExceptionHandlerTest {
             ResponseEntity<ErrorResponse> response = handler.handleFeignException(e);
 
             //then
-            assertErrorResponse(response, 404);
+            //외부 서비스의 404를 그대로 내보내면 주문 API 경로 없음(404)과 구분 불가
+            assertErrorResponse(response, 502);
+            assertThat(response.getBody().getMessage()).isEqualTo("외부 서비스 처리 중 오류가 발생했습니다.");
         }
 
         @Test
-        public void 외부서비스가_500으로_응답하면_500으로_응답한다() {
+        public void 외부서비스가_5xx로_응답하면_502로_응답한다() {
             //given
             FeignException e = new FeignException.InternalServerError("Internal Server Error", request, null, null);
 
@@ -322,8 +324,24 @@ class GlobalExceptionHandlerTest {
             ResponseEntity<ErrorResponse> response = handler.handleFeignException(e);
 
             //then
-            //현재 동작: 외부 상태코드·메시지를 그대로 전달 (보상처리 시 502 등으로 정리 예정)
-            assertErrorResponse(response, 500);
+            assertErrorResponse(response, 502);
+        }
+
+        @Test
+        public void 외부서비스_에러응답의_내부_메시지를_노출하지_않는다() {
+            //given
+            FeignException e = new FeignException.InternalServerError(
+                    "[500] during [GET] to [http://company-service/api/items/1] [CompanyServiceClient#fetchItemById(UUID)]",
+                    request, "{\"trace\":\"stack\"}".getBytes(), null);
+
+            //when
+            ResponseEntity<ErrorResponse> response = handler.handleFeignException(e);
+
+            //then
+            assertThat(response.getBody().getMessage())
+                    .doesNotContain("company-service")
+                    .doesNotContain("CompanyServiceClient")
+                    .doesNotContain("trace");
         }
     }
 }

@@ -136,10 +136,13 @@ class OrderServiceTest {
                 });
     }
 
-    private FeignException feignException() {
-        Request request = Request.create(Request.HttpMethod.POST, "http://mock",
+    private Request feignRequest() {
+        return Request.create(Request.HttpMethod.POST, "http://mock",
                 Map.of(), null, StandardCharsets.UTF_8, null);
-        return new FeignException.InternalServerError("mock error", request, null, null);
+    }
+
+    private FeignException feignException() {
+        return new FeignException.InternalServerError("mock error", feignRequest(), null, null);
     }
 
     private static void assertErrorCode(Throwable e, ErrorCode errorCode) {
@@ -317,6 +320,47 @@ class OrderServiceTest {
             assertThatThrownBy(() -> orderService.create(orderRequest()))
                     .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_PRICE_CHANGED));
             verify(companyServiceClient, never()).fetchCompanyById(any());
+            verifyNoInteractions(hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 상품이_없으면_C400_ITEM_NOT_FOUND_예외가_발생하고_재고감소를_하지_않는다() {
+            //given
+            loginAs("MASTER");
+            givenExternalApisSucceed();
+            given(companyServiceClient.fetchItemById(itemId))
+                    .willThrow(new FeignException.NotFound("Not Found", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C400_ITEM_NOT_FOUND));
+            verifyNoInteractions(hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 업체가_없으면_C400_COMPANY_NOT_FOUND_예외가_발생하고_재고감소를_하지_않는다() {
+            //given
+            loginAs("MASTER");
+            givenExternalApisSucceed();
+            given(companyServiceClient.fetchCompanyById(supplierId))
+                    .willThrow(new FeignException.NotFound("Not Found", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C400_COMPANY_NOT_FOUND));
+            verifyNoInteractions(hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 상품조회가_404가_아닌_에러면_FeignException을_그대로_전달한다() {
+            //given
+            loginAs("MASTER");
+            givenExternalApisSucceed();
+            given(companyServiceClient.fetchItemById(itemId)).willThrow(feignException());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .isInstanceOf(FeignException.InternalServerError.class);
             verifyNoInteractions(hubServiceClient, deliveryServiceClient, orderTransactionService);
         }
 

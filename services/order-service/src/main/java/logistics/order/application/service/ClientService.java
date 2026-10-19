@@ -23,14 +23,22 @@ public class ClientService {
     private final DeliveryServiceClient deliveryServiceClient;
     private final OrderValidator orderValidator;
 
-    //상품 조회
+    //상품 조회 / 요청한 상품이 없으면 잘못된 요청
     public FetchItemByIdResponse fetchItemById(UUID itemId) {
-        return companyServiceClient.fetchItemById(itemId);
+        try {
+            return companyServiceClient.fetchItemById(itemId);
+        } catch (FeignException.NotFound e) {
+            throw new CustomException(ErrorCode.C400_ITEM_NOT_FOUND);
+        }
     }
 
-    //업체 조회
+    //업체 조회 / 요청한 업체가 없으면 잘못된 요청
     public FetchCompanyByIdResponse fetchCompanyById(UUID companyId) {
-        return companyServiceClient.fetchCompanyById(companyId);
+        try {
+            return companyServiceClient.fetchCompanyById(companyId);
+        } catch (FeignException.NotFound e) {
+            throw new CustomException(ErrorCode.C400_COMPANY_NOT_FOUND);
+        }
     }
 
     //재고 차감
