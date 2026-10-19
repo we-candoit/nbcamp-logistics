@@ -44,7 +44,7 @@ public class OrderService {
 
         //배송생성
         CreateDeliveryResponse createDeliveryResponse = clientService.createDelivery(
-                buildCreateDeliveryRequest(order, orderItem, request)
+                CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
         );
 
         //주문저장
@@ -114,19 +114,6 @@ public class OrderService {
                 requesterCompany.getHubId(),
                 requesterCompany.getAddress(),
                 request.getRequestNote()
-        );
-    }
-
-    //배송생성 API Request 빌드
-    private CreateDeliveryRequest buildCreateDeliveryRequest(Order order, OrderItem orderItems,
-                                                             CreateOrderRequest createOrderDto) {
-        return new CreateDeliveryRequest(
-                order.getId(),
-                orderItems.getDepartureHubId(),
-                order.getDestinationHubId(),
-                order.getAddress(),
-                createOrderDto.getRecipientName(),
-                createOrderDto.getRecipientPhone()
         );
     }
 
