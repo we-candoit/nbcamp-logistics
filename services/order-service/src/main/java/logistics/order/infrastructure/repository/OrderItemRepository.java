@@ -17,6 +17,10 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
             "where o.id = :orderId and o.deletedAt is null")
     Optional<OrderItem> findWithOrder(@Param("orderId") UUID orderId);
 
+    //주문 ID로 주문상품 조회 / 삭제 여부와 관계없이 조회 (주문삭제 보상처리용)
+    @Query("select oi from OrderItem oi join fetch oi.order o where o.id = :orderId")
+    Optional<OrderItem> findWithOrderIncludingDeleted(@Param("orderId") UUID orderId);
+
     //===== 주문 목록 조회 / 삭제되지 않은 주문만, 최신순 =====
     //null 파라미터 비교(:status is null)는 PostgreSQL에서 타입 추론 오류가 날 수 있어 조건별로 분리
 

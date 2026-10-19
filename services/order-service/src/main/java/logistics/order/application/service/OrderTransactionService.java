@@ -64,6 +64,29 @@ public class OrderTransactionService {
         return order;
     }
 
+    //주문ID를 사용하여 특정 주문삭제 / 주문과 주문상품을 함께 soft delete
+    @Transactional
+    public Order delete(UUID orderId, UUID userId) {
+        OrderItem orderItem = orderItemRepository.findWithOrder(orderId).orElseThrow(
+                () -> new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+        Order order = orderItem.getOrder();
+
+        orderValidator.validateOrderOwner(order.getOrderUserId());
+        order.delete(userId);
+        orderItem.delete(userId);
+        return order;
+    }
+
+    //주문삭제 실패시 보상 시나리오 / 주문과 주문상품 삭제 취소
+    @Transactional
+    public void compensateDeleteOrder(UUID orderId) {
+        OrderItem orderItem = orderItemRepository.findWithOrderIncludingDeleted(orderId).orElseThrow(
+                () -> new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+
+        orderItem.getOrder().revertDelete();
+        orderItem.revertDelete();
+    }
+
     //주문취소 실패시 보상 시나리오
     @Transactional
     public void compensateCancelOrder(UUID orderId) {

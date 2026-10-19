@@ -264,7 +264,9 @@ class OrderTransactionServiceTest {
             //given
             Order order = confirmedOrder();
             orderTransactionService.save(order, orderItem(order));
-            order.softDelete(userId);
+            //삭제는 취소된 주문만 가능 → 취소 후 삭제
+            order.cancel();
+            order.delete(userId);
             em.flush();
             em.clear();
 
@@ -331,7 +333,9 @@ class OrderTransactionServiceTest {
             //given
             Order order = confirmedOrder();
             orderTransactionService.save(order, orderItem(order));
-            order.softDelete(userId);
+            //삭제는 취소된 주문만 가능 → 취소 후 삭제
+            order.cancel();
+            order.delete(userId);
             em.flush();
             em.clear();
 
@@ -437,6 +441,173 @@ class OrderTransactionServiceTest {
     }
 
     @Nested
+    @DisplayName("delete()")
+    class Delete {
+
+        //취소된 주문을 저장 후 영속성 컨텍스트 초기화
+        private Order savedCancelledOrder(UUID orderUserId) {
+            Order order = new Order(orderUserId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
+            order.confirm(UUID.randomUUID());
+            order.cancel();
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+            return order;
+        }
+
+        private OrderItem findOrderItem(UUID orderId) {
+            return orderItemRepository.findWithOrderIncludingDeleted(orderId).orElseThrow();
+        }
+
+        @Test
+        public void 주문을_삭제하면_주문과_주문상품이_함께_삭제된다() {
+            //given
+            Order order = savedCancelledOrder(userId);
+
+            //when
+            Order deleted = orderTransactionService.delete(order.getId(), userId);
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(deleted.getDeliveryId()).isEqualTo(order.getDeliveryId());
+            OrderItem found = findOrderItem(order.getId());
+            assertThat(found.isDeleted()).isTrue();
+            assertThat(found.getDeletedBy()).isEqualTo(userId);
+            assertThat(found.getOrder().isDeleted()).isTrue();
+            assertThat(found.getOrder().getDeletedBy()).isEqualTo(userId);
+        }
+
+        @Test
+        public void 삭제된_주문은_조회되지_않는다() {
+            //given
+            Order order = savedCancelledOrder(userId);
+            orderTransactionService.delete(order.getId(), userId);
+            em.flush();
+            em.clear();
+
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.findWithOrder(order.getId()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+
+        @Test
+        public void MASTER는_다른_사람의_주문도_삭제한다() {
+            //given
+            httpRequest.setAttribute(AuthHeaders.ROLE, "MASTER");
+            Order order = savedCancelledOrder(UUID.randomUUID());
+
+            //when
+            orderTransactionService.delete(order.getId(), userId);
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(findOrderItem(order.getId()).getOrder().isDeleted()).isTrue();
+        }
+
+        @Test
+        public void 없는_주문이면_C404_예외가_발생한다() {
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.delete(UUID.randomUUID(), userId))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+
+        @Test
+        public void 이미_삭제된_주문이면_C404_예외가_발생한다() {
+            //given
+            Order order = savedCancelledOrder(userId);
+            orderTransactionService.delete(order.getId(), userId);
+            em.flush();
+            em.clear();
+
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.delete(order.getId(), userId))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+
+        @Test
+        public void 다른_사람의_주문이면_C403_예외가_발생하고_삭제되지_않는다() {
+            //given
+            Order order = savedCancelledOrder(UUID.randomUUID());
+
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.delete(order.getId(), userId))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C403_FORBIDDEN_ORDER));
+            em.flush();
+            em.clear();
+            assertThat(findOrderItem(order.getId()).getOrder().isDeleted()).isFalse();
+        }
+
+        @Test
+        public void 취소되지_않은_주문이면_C409_예외가_발생하고_삭제되지_않는다() {
+            //given
+            Order order = confirmedOrder();
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.delete(order.getId(), userId))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C409_INVALID_ORDER_STATUS));
+            em.flush();
+            em.clear();
+            OrderItem found = findOrderItem(order.getId());
+            assertThat(found.isDeleted()).isFalse();
+            assertThat(found.getOrder().isDeleted()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("compensateDeleteOrder()")
+    class CompensateDeleteOrder {
+
+        @Test
+        public void 삭제된_주문과_주문상품을_복구한다() {
+            //given
+            Order order = confirmedOrder();
+            order.cancel();
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+            orderTransactionService.delete(order.getId(), userId);
+            em.flush();
+            em.clear();
+
+            //when
+            orderTransactionService.compensateDeleteOrder(order.getId());
+            em.flush();
+            em.clear();
+
+            //then
+            OrderItem found = orderTransactionService.findWithOrder(order.getId());
+            assertThat(found.isDeleted()).isFalse();
+            assertThat(found.getDeletedBy()).isNull();
+            assertThat(found.getOrder().isDeleted()).isFalse();
+            assertThat(found.getOrder().getDeletedBy()).isNull();
+        }
+
+        @Test
+        public void 없는_주문이면_C404_예외가_발생한다() {
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.compensateDeleteOrder(UUID.randomUUID()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+    }
+
+    @Nested
     @DisplayName("findAllWithOrder()")
     class FindOrderItemsWithOrder {
 
@@ -452,8 +623,10 @@ class OrderTransactionServiceTest {
             myWaiting = orderOf(userId, false);
             otherConfirmed = orderOf(otherUserId, true);
 
+            //삭제는 취소된 주문만 가능 → 취소 후 삭제
             Order deleted = orderOf(userId, true);
-            deleted.softDelete(userId);
+            deleted.cancel();
+            deleted.delete(userId);
 
             em.flush();
             em.clear();
