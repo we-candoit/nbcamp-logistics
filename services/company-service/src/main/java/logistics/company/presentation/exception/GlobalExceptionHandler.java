@@ -71,6 +71,13 @@ public class GlobalExceptionHandler {
         return toResponse(ErrorCode.BAD_REQUEST, request, errors);
     }
 
+    // 외부 서비스 404: 요청한 데이터가 상대 서비스에 없음 (허브·사용자 등)
+    @ExceptionHandler(FeignException.NotFound.class)
+    public ResponseEntity<ErrorResponse> handleFeignNotFound(FeignException.NotFound e, HttpServletRequest request) {
+        log.warn("External resource not found: url={}", e.request().url());
+        return toResponse(ErrorCode.NOT_FOUND, request);
+    }
+
     // 외부 호출 실패: Feign 호출 오류, 타임아웃
     @ExceptionHandler(FeignException.class)
     public ResponseEntity<ErrorResponse> handleFeignException(FeignException e, HttpServletRequest request) {

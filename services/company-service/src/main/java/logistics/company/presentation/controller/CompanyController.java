@@ -2,13 +2,15 @@ package logistics.company.presentation.controller;
 
 import jakarta.validation.Valid;
 import logistics.company.application.service.CompanyService;
-import logistics.company.domain.entity.Company;
 import logistics.company.presentation.dto.request.company.CompanyCreateRequest;
 import logistics.company.presentation.dto.response.CompanyResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
