@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import logistics.company.domain.entity.Company;
 import logistics.company.domain.entity.CompanyItem;
 import logistics.company.infrastructure.repository.CompanyItemRepository;
+import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.presentation.dto.request.companyItem.CompanyItemCreateRequest;
 import logistics.company.presentation.dto.response.CompanyItemResponse;
 import logistics.company.presentation.exception.BusinessException;
@@ -17,6 +18,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class CompanyItemService {
+    private final CompanyRepository companyRepository;
     private final CompanyItemRepository companyItemRepository;
 
     private static final String MASTER = "MASTER";
@@ -24,8 +26,8 @@ public class CompanyItemService {
     @Transactional
     public CompanyItemResponse createItem(UUID companyId, UUID userId, String role, @Valid CompanyItemCreateRequest request) {
         // 1. 소속 업체 존재 확인
-        Company company = companyItemRepository.findById(companyId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND)).getCompany();
+        Company company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
 
         // 2. 권한 체크 : MASTER 또는 해당 업체 관리자인지 확인
         if (!MASTER.equals(role) && !company.isManagedBy(userId)) { // MASTER or 해당 업체 관리자가 아닌 경우
@@ -40,7 +42,7 @@ public class CompanyItemService {
 
         // 4. 저장
         CompanyItem item = CompanyItem.create(
-                company, request.getName(), request.getPrice(), request.getDescription()
+                company, itemName, request.getPrice(), request.getDescription()
         );
 
         CompanyItem saved = companyItemRepository.saveAndFlush(item);
