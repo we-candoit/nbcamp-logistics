@@ -3,8 +3,8 @@ package logistics.order.domain.entity;
 import jakarta.persistence.*;
 import logistics.order.common.entity.BaseEntity;
 import logistics.order.domain.enums.OrderStatus;
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -67,17 +67,20 @@ public class Order extends BaseEntity {
         return this.orderStatus == OrderStatus.CONFIRMED;
     }
 
-    //주문취소 상태변경
-    public Order cancel() {
-        if (isCancelable()) {
-            this.orderStatus = OrderStatus.CANCELLED;
-            return this;
+    //주문취소, CONFIRMED 상태에서만 가능
+    public void cancel() {
+        if (!isCancelable()) {
+            throw new CustomException(ErrorCode.C409_INVALID_ORDER_STATUS);
         }
-        return null;
+
+        this.orderStatus = OrderStatus.CANCELLED;
     }
 
-    //주문가능 상태변경
+    //주문취소 보상, CANCELLED 상태만 CONFIRMED로 복구
+    //보상 중 예외가 발생하면 원래 실패 원인이 가려지므로 예외 없이 무시
     public void revertCancel() {
-        this.orderStatus = OrderStatus.CONFIRMED;
+        if (this.orderStatus == OrderStatus.CANCELLED) {
+            this.orderStatus = OrderStatus.CONFIRMED;
+        }
     }
 }

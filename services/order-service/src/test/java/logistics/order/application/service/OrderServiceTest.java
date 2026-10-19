@@ -23,8 +23,8 @@ import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
 import logistics.order.presentation.dto.response.OrderDetailResponse;
 import logistics.order.presentation.dto.response.OrderListResponse;
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -65,11 +65,10 @@ class OrderServiceTest {
     //검증 로직은 실제 객체 사용 (목데이터로 실제 검증 흐름까지 확인)
     private final OrderValidator orderValidator = new OrderValidator(userServiceClient);
 
-    private final ClientService clientService = new ClientService(deliveryServiceClient, orderTransactionService, orderValidator);
+    private final ClientService clientService = new ClientService(
+            companyServiceClient, hubServiceClient, deliveryServiceClient, orderValidator);
 
-    private final OrderService orderService = new OrderService(
-            companyServiceClient, hubServiceClient, deliveryServiceClient, orderValidator, orderTransactionService,
-            clientService);
+    private final OrderService orderService = new OrderService(orderValidator, orderTransactionService, clientService);
 
     //===== 목데이터 =====
     private final UUID userId = UUID.randomUUID();
@@ -137,10 +136,13 @@ class OrderServiceTest {
                 });
     }
 
-    private FeignException feignException() {
-        Request request = Request.create(Request.HttpMethod.POST, "http://mock",
+    private Request feignRequest() {
+        return Request.create(Request.HttpMethod.POST, "http://mock",
                 Map.of(), null, StandardCharsets.UTF_8, null);
-        return new FeignException.InternalServerError("mock error", request, null, null);
+    }
+
+    private FeignException feignException() {
+        return new FeignException.InternalServerError("mock error", feignRequest(), null, null);
     }
 
     private static void assertErrorCode(Throwable e, ErrorCode errorCode) {
@@ -322,6 +324,47 @@ class OrderServiceTest {
         }
 
         @Test
+        public void 상품이_없으면_C400_ITEM_NOT_FOUND_예외가_발생하고_재고감소를_하지_않는다() {
+            //given
+            loginAs("MASTER");
+            givenExternalApisSucceed();
+            given(companyServiceClient.fetchItemById(itemId))
+                    .willThrow(new FeignException.NotFound("Not Found", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C400_ITEM_NOT_FOUND));
+            verifyNoInteractions(hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 업체가_없으면_C400_COMPANY_NOT_FOUND_예외가_발생하고_재고감소를_하지_않는다() {
+            //given
+            loginAs("MASTER");
+            givenExternalApisSucceed();
+            given(companyServiceClient.fetchCompanyById(supplierId))
+                    .willThrow(new FeignException.NotFound("Not Found", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C400_COMPANY_NOT_FOUND));
+            verifyNoInteractions(hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 상품조회가_404가_아닌_에러면_FeignException을_그대로_전달한다() {
+            //given
+            loginAs("MASTER");
+            givenExternalApisSucceed();
+            given(companyServiceClient.fetchItemById(itemId)).willThrow(feignException());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .isInstanceOf(FeignException.InternalServerError.class);
+            verifyNoInteractions(hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
         public void 재고감소에_실패하면_배송생성과_저장을_하지_않는다() {
             //given
             loginAs("MASTER");
@@ -451,7 +494,10 @@ class OrderServiceTest {
         private Order givenCancelableOrder() {
             Order order = new Order(userId, requesterId, requesterHubId, "서울시 강남구 테헤란로 1", null);
             order.confirm(deliveryId);
-            given(orderTransactionService.cancel(order.getId())).willAnswer(invocation -> order.cancel());
+            given(orderTransactionService.cancel(order.getId())).willAnswer(invocation -> {
+                order.cancel();
+                return order;
+            });
             given(deliveryServiceClient.cancelDelivery(deliveryId))
                     .willReturn(new CancelDeliveryResponse(deliveryId, "CANCELLED"));
             return order;
@@ -682,13 +728,13 @@ class OrderServiceTest {
             public void MASTER가_상태를_지정하면_해당_상태로_조회한다() {
                 //given
                 loginAs("MASTER");
-                given(orderTransactionService.findAllWithOrder(null, "CONFIRMED")).willReturn(List.of());
+                given(orderTransactionService.findAllWithOrder(null, OrderStatus.CONFIRMED)).willReturn(List.of());
 
                 //when
-                orderService.getOrdersByStatus("CONFIRMED");
+                orderService.getOrdersByStatus(OrderStatus.CONFIRMED);
 
                 //then
-                verify(orderTransactionService).findAllWithOrder(null, "CONFIRMED");
+                verify(orderTransactionService).findAllWithOrder(null, OrderStatus.CONFIRMED);
             }
 
             @Test
@@ -708,13 +754,13 @@ class OrderServiceTest {
             public void 일반_유저가_상태를_지정하면_본인의_해당_상태_주문만_조회한다() {
                 //given
                 loginAs("COMPANY_MANAGER");
-                given(orderTransactionService.findAllWithOrder(userId, "WAITING")).willReturn(List.of());
+                given(orderTransactionService.findAllWithOrder(userId, OrderStatus.WAITING)).willReturn(List.of());
 
                 //when
-                orderService.getOrdersByStatus("WAITING");
+                orderService.getOrdersByStatus(OrderStatus.WAITING);
 
                 //then
-                verify(orderTransactionService).findAllWithOrder(userId, "WAITING");
+                verify(orderTransactionService).findAllWithOrder(userId, OrderStatus.WAITING);
             }
 
             @Test
@@ -728,44 +774,6 @@ class OrderServiceTest {
 
                 //then
                 assertThat(response.getOrders()).isEmpty();
-            }
-        }
-
-        @Nested
-        @DisplayName("실패 케이스")
-        class Failure {
-
-            @Test
-            public void 존재하지_않는_상태면_C400_예외가_발생하고_조회하지_않는다() {
-                //given
-                loginAs("MASTER");
-
-                //when, then
-                assertThatThrownBy(() -> orderService.getOrdersByStatus("SHIPPING"))
-                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
-                verifyNoInteractions(orderTransactionService);
-            }
-
-            @Test
-            public void 상태가_빈_문자열이면_C400_예외가_발생하고_조회하지_않는다() {
-                //given
-                loginAs("MASTER");
-
-                //when, then
-                assertThatThrownBy(() -> orderService.getOrdersByStatus(" "))
-                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
-                verifyNoInteractions(orderTransactionService);
-            }
-
-            @Test
-            public void 소문자_상태는_유효하지_않은_상태로_처리한다() {
-                //given
-                loginAs("MASTER");
-
-                //when, then
-                assertThatThrownBy(() -> orderService.getOrdersByStatus("confirmed"))
-                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_INVALID_ORDER_STATUS));
-                verifyNoInteractions(orderTransactionService);
             }
         }
     }

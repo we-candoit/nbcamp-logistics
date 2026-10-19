@@ -1,4 +1,4 @@
-package logistics.order.presentation.exception;
+package logistics.order.common.exception;
 
 import lombok.Getter;
 

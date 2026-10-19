@@ -2,6 +2,7 @@ package logistics.order.presentation.controller;
 
 import jakarta.validation.Valid;
 import logistics.order.application.service.OrderService;
+import logistics.order.domain.enums.OrderStatus;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
@@ -38,7 +39,7 @@ public class OrderController {
     }
 
     @GetMapping
-    public ResponseEntity<OrderListResponse> getOrdersByStatus(@RequestParam(required = false) String status) {
+    public ResponseEntity<OrderListResponse> getOrdersByStatus(@RequestParam(required = false) OrderStatus status) {
         return ResponseEntity.ok(orderService.getOrdersByStatus(status));
     }
 

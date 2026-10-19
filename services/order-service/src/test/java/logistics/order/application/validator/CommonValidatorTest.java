@@ -1,7 +1,7 @@
 package logistics.order.application.validator;
 
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

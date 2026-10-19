@@ -1,8 +1,8 @@
 package logistics.order.domain.entity;
 
 import logistics.order.domain.enums.OrderStatus;
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -202,6 +202,69 @@ class OrderTest {
                 assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
                 assertThat(order.getDeliveryId()).isEqualTo(deliveryId);
             }
+        }
+
+        @Nested
+        @DisplayName("실패 케이스")
+        class Failure {
+
+            @ParameterizedTest
+            @EnumSource(value = OrderStatus.class, names = "CONFIRMED", mode = EnumSource.Mode.EXCLUDE)
+            public void CONFIRMED가_아닌_주문을_취소하면_C409_예외가_발생하고_상태는_그대로다(OrderStatus status) {
+                //given
+                Order order = createOrder();
+                ReflectionTestUtils.setField(order, "orderStatus", status);
+
+                //when, then
+                assertThatThrownBy(order::cancel)
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_INVALID_ORDER_STATUS));
+                assertThat(order.getOrderStatus()).isEqualTo(status);
+            }
+
+            @Test
+            public void 이미_취소된_주문을_다시_취소하면_C409_예외가_발생한다() {
+                //given
+                Order order = createOrder();
+                order.confirm(UUID.randomUUID());
+                order.cancel();
+
+                //when, then
+                assertThatThrownBy(order::cancel)
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_INVALID_ORDER_STATUS));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("revertCancel()")
+    class RevertCancel {
+
+        @Test
+        public void 취소된_주문은_CONFIRMED로_복구된다() {
+            //given
+            Order order = createOrder();
+            order.confirm(UUID.randomUUID());
+            order.cancel();
+
+            //when
+            order.revertCancel();
+
+            //then
+            assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = OrderStatus.class, names = "CANCELLED", mode = EnumSource.Mode.EXCLUDE)
+        public void 취소되지_않은_주문은_예외_없이_상태가_그대로다(OrderStatus status) {
+            //given
+            Order order = createOrder();
+            ReflectionTestUtils.setField(order, "orderStatus", status);
+
+            //when
+            order.revertCancel();
+
+            //then
+            assertThat(order.getOrderStatus()).isEqualTo(status);
         }
     }
 
