@@ -7,7 +7,8 @@ import logistics.order.common.AuthHeaders;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.domain.enums.OrderStatus;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
-import logistics.order.presentation.dto.response.GetOrderByIdResponse;
+import logistics.order.presentation.dto.response.OrderDetailResponse;
+import logistics.order.presentation.dto.response.OrderListResponse;
 import logistics.order.presentation.exception.CustomException;
 import logistics.order.presentation.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -344,10 +346,10 @@ class OrderControllerTest {
     @DisplayName("주문 단건 조회")
     class GetOrder {
 
-        private GetOrderByIdResponse response() {
-            return new GetOrderByIdResponse(orderId, deliveryId, userId, requesterId, OrderStatus.CONFIRMED,
+        private OrderDetailResponse response() {
+            return new OrderDetailResponse(orderId, deliveryId, userId, requesterId, OrderStatus.CONFIRMED,
                     "서울시 강남구", "문 앞에 놓아주세요",
-                    new GetOrderByIdResponse.Item(itemId, supplierId, "생수 2L", 15000L, 3L, 45000L),
+                    new OrderDetailResponse.Item(itemId, supplierId, "생수 2L", 15000L, 3L, 45000L),
                     LocalDateTime.of(2026, 10, 18, 12, 0));
         }
 
@@ -411,6 +413,72 @@ class OrderControllerTest {
                     .andExpect(status().isUnauthorized());
 
             verify(orderService, never()).getOrderById(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("주문 목록 조회")
+    class GetOrderByStatus {
+
+        private OrderListResponse response() {
+            return new OrderListResponse(List.of(new OrderDetailResponse(orderId, deliveryId, userId, requesterId,
+                    OrderStatus.CONFIRMED, "서울시 강남구", null,
+                    new OrderDetailResponse.Item(itemId, supplierId, "생수 2L", 15000L, 3L, 45000L),
+                    LocalDateTime.of(2026, 10, 19, 12, 0))));
+        }
+
+        @Test
+        public void 상태_없이_요청하면_200과_주문목록을_반환한다() throws Exception {
+            //given
+            given(orderService.getOrdersByStatus(null)).willReturn(response());
+
+            //when, then
+            mockMvc.perform(get("/api/orders")
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.orders.length()").value(1))
+                    .andExpect(jsonPath("$.orders[0].orderId").value(orderId.toString()))
+                    .andExpect(jsonPath("$.orders[0].status").value("CONFIRMED"))
+                    .andExpect(jsonPath("$.orders[0].item.itemId").value(itemId.toString()));
+        }
+
+        @Test
+        public void 상태를_지정하면_서비스에_그대로_전달한다() throws Exception {
+            //given
+            given(orderService.getOrdersByStatus("CONFIRMED")).willReturn(new OrderListResponse(List.of()));
+
+            //when, then
+            mockMvc.perform(get("/api/orders").param("status", "CONFIRMED")
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.orders").isEmpty());
+
+            verify(orderService).getOrdersByStatus("CONFIRMED");
+        }
+
+        @Test
+        public void 유효하지_않은_상태면_400을_반환한다() throws Exception {
+            //given
+            given(orderService.getOrdersByStatus("SHIPPING"))
+                    .willThrow(new CustomException(ErrorCode.C400_INVALID_ORDER_STATUS));
+
+            //when, then
+            mockMvc.perform(get("/api/orders").param("status", "SHIPPING")
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+
+        @Test
+        public void 인증_헤더가_없으면_401을_반환한다() throws Exception {
+            //when, then
+            mockMvc.perform(get("/api/orders"))
+                    .andExpect(status().isUnauthorized());
+
+            verify(orderService, never()).getOrdersByStatus(any());
         }
     }
 }
