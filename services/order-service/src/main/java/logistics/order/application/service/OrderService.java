@@ -76,13 +76,11 @@ public class OrderService {
     }
 
     //STATUS에 맞는 주문 목록조회, 만약 STATUS 비어 있으면 주문 전체조회
-    public OrderListResponse getOrdersByStatus(String status) {
-        orderValidator.validateOrderStatus(status);
-
+    public OrderListResponse getOrdersByStatus(OrderStatus orderStatus) {
         //MASTER는 모든 주문, 그 외는 본인이 생성한 주문만
         UUID orderUserId = AuthContext.isMaster() ? null : AuthContext.getUserId();
 
-        return new OrderListResponse(orderTransactionService.findAllWithOrder(orderUserId, status)
+        return new OrderListResponse(orderTransactionService.findAllWithOrder(orderUserId, orderStatus)
                 .stream().map(OrderDetailResponse::from)
                 .toList()
         );
