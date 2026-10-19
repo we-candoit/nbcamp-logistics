@@ -10,18 +10,14 @@ import logistics.order.infrastructure.client.DeliveryServiceClient;
 import logistics.order.infrastructure.client.HubServiceClient;
 import logistics.order.infrastructure.client.dto.*;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
+import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
 import logistics.order.presentation.dto.response.OrderDetailResponse;
 import logistics.order.presentation.dto.response.OrderListResponse;
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.UUID;
-
-import static logistics.order.application.validator.CommonValidator.validateEqual;
 
 @Service
 @RequiredArgsConstructor
@@ -32,7 +28,9 @@ public class OrderService {
     private final DeliveryServiceClient deliveryServiceClient;
     private final OrderValidator orderValidator;
     private final OrderTransactionService orderTransactionService;
+    private final ClientService clientService;
 
+    //주문생성
     public CreateOrderResponse create(CreateOrderRequest request) {
         //올바른 요청 및 상품 인지 검증
         orderValidator.validateOrder(request);
@@ -69,43 +67,33 @@ public class OrderService {
         );
     }
 
+    //주문ID로 주문 단건조회
     public OrderDetailResponse getOrderById(UUID orderId) {
-        OrderItem orderItem = orderTransactionService.findOrderItemWithOrder(orderId);
-
-        //MASTER는 모든 주문 조회 가능 / 그 외는 본인이 생성한 주문만 조회 가능
-        if (!AuthContext.isMaster()) {
-            validateEqual(orderItem.getOrder().getOrderUserId(), AuthContext.getUserId(), ErrorCode.C403_FORBIDDEN_ORDER);
-        }
+        OrderItem orderItem = orderTransactionService.findWithOrder(orderId);
+        orderValidator.validateOrderOwner(orderItem.getOrder().getOrderUserId());
 
         return OrderDetailResponse.from(orderItem);
     }
 
-    //주문 목록 조회 / status가 없으면 전체 상태 조회
+    //STATUS에 맞는 주문 목록조회, 만약 STATUS 비어 있으면 주문 전체조회
     public OrderListResponse getOrdersByStatus(String status) {
-        OrderStatus orderStatus = toOrderStatus(status);
+        orderValidator.validateOrderStatus(status);
 
-        //MASTER는 모든 주문 / 그 외는 본인이 생성한 주문만
+        //MASTER는 모든 주문, 그 외는 본인이 생성한 주문만
         UUID orderUserId = AuthContext.isMaster() ? null : AuthContext.getUserId();
 
-        List<OrderDetailResponse> orders = orderTransactionService.findOrderItemsWithOrder(orderUserId, orderStatus)
-                .stream()
-                .map(OrderDetailResponse::from)
-                .toList();
-
-        return new OrderListResponse(orders);
+        return new OrderListResponse(orderTransactionService.findAllWithOrder(orderUserId, status)
+                .stream().map(OrderDetailResponse::from)
+                .toList()
+        );
     }
 
-    //조회할 주문상태 변환 / 없으면 null(전체), 유효하지 않으면 예외 (대소문자 구분)
-    private OrderStatus toOrderStatus(String status) {
-        if (status == null || status.isBlank()) {
-            return null;
-        }
+    //주문ID로 주문취소
+    public CancelOrderResponse cancelOrderById(UUID orderId) {
+        Order order = orderTransactionService.cancel(orderId);
+        clientService.cancelDelivery(order.getDeliveryId(), orderId);
 
-        try {
-            return OrderStatus.valueOf(status);
-        } catch (IllegalArgumentException e) {
-            throw new CustomException(ErrorCode.C400_INVALID_ORDER_STATUS);
-        }
+        return CancelOrderResponse.from(order);
     }
 
     private OrderItem buildOrderItem(CreateOrderRequest request, FetchCompanyByIdResponse supplierCompany,
