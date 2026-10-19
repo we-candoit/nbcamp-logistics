@@ -14,6 +14,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.withSettings;
 
 import feign.FeignException;
+
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import logistics.company.application.service.CompanyService;
@@ -25,6 +28,7 @@ import logistics.company.infrastructure.client.dto.UserApiResponse;
 import logistics.company.infrastructure.client.dto.UserResponse;
 import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.presentation.dto.request.company.CompanyCreateRequest;
+import logistics.company.presentation.dto.request.company.CompanySearchCondition;
 import logistics.company.presentation.dto.response.CompanyResponse;
 import logistics.company.presentation.exception.BusinessException;
 import logistics.company.presentation.exception.ErrorCode;
@@ -39,6 +43,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.quality.Strictness;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.*;
+import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
 class CompanyServiceTest {
@@ -49,6 +55,9 @@ class CompanyServiceTest {
     private static final String NAME = "스파르타수산";
     private static final String ADDRESS = "독도";
     private static final String MASTER = "MASTER";
+
+    private static final Pageable PAGEABLE =
+            PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
 
     @Mock
     private CompanyRepository companyRepository;
@@ -203,6 +212,68 @@ class CompanyServiceTest {
         then(companyRepository).should().saveAndFlush(any(Company.class));
     }
 
+    // ===== 상세 조회 =====
+
+    @Test
+    @DisplayName("상세 조회 성공: 업체 정보를 CompanyResponse로 반환한다")
+    void getCompany_success() {
+        Company company = givenCompany();
+        given(companyRepository.findById(COMPANY_ID)).willReturn(Optional.of(company));
+
+        CompanyResponse response = companyService.getCompany(COMPANY_ID);
+
+        assertThat(response.getCompanyId()).isEqualTo(COMPANY_ID);
+        assertThat(response.getHubId()).isEqualTo(HUB_ID);
+        assertThat(response.getManagerUserId()).isEqualTo(MANAGER_ID);
+        assertThat(response.getName()).isEqualTo(NAME);
+        assertThat(response.getAddress()).isEqualTo(ADDRESS);
+    }
+
+    @Test
+    @DisplayName("상세 조회 실패: 업체가 없거나 삭제됐으면 404 COMPANY_NOT_FOUND")
+    void getCompany_notFound() {
+        given(companyRepository.findById(COMPANY_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> companyService.getCompany(COMPANY_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMPANY_NOT_FOUND);
+    }
+
+    // ===== 목록 검색 =====
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("목록 검색 성공: 조회 결과를 CompanyResponse 페이지로 변환하고, 페이징 정보를 그대로 전달한다")
+    void searchCompanies_success() {
+        Company company = givenCompany();
+        given(companyRepository.findAll(any(Specification.class), eq(PAGEABLE)))
+                .willReturn(new PageImpl<>(List.of(company), PAGEABLE, 1));
+
+        Page<CompanyResponse> result = companyService.searchCompanies(condition("수산", null), PAGEABLE);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getName()).isEqualTo(NAME);
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getNumber()).isZero();
+        assertThat(result.getSize()).isEqualTo(20);
+
+        then(companyRepository).should().findAll(any(Specification.class), eq(PAGEABLE));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("목록 검색: 결과가 없으면 빈 페이지를 반환한다 (예외 아님)")
+    void searchCompanies_empty() {
+        given(companyRepository.findAll(any(Specification.class), eq(PAGEABLE)))
+                .willReturn(Page.empty(PAGEABLE));
+
+        Page<CompanyResponse> result = companyService.searchCompanies(condition("없는업체", null), PAGEABLE);
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
+    }
+
     // ===== 헬퍼 =====
 
     @SuppressWarnings("unchecked")
@@ -233,5 +304,23 @@ class CompanyServiceTest {
 
     private static <T> T lenientMock(Class<T> type) {
         return mock(type, withSettings().strictness(Strictness.LENIENT));
+    }
+
+
+    private Company givenCompany() {
+        Company company = mock(Company.class, withSettings().strictness(Strictness.LENIENT));
+        given(company.getId()).willReturn(COMPANY_ID);
+        given(company.getHubId()).willReturn(HUB_ID);
+        given(company.getManagerUserId()).willReturn(MANAGER_ID);
+        given(company.getName()).willReturn(NAME);
+        given(company.getAddress()).willReturn(ADDRESS);
+        return company;
+    }
+
+    private CompanySearchCondition condition(String companyName, String address) {
+        CompanySearchCondition condition = new CompanySearchCondition();
+        condition.setCompanyName(companyName);
+        condition.setAddress(address);
+        return condition;
     }
 }

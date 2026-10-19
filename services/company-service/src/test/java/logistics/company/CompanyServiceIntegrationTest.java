@@ -1,21 +1,7 @@
 package logistics.company;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
-import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.Mockito.mock;
-
 import feign.FeignException;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
 import logistics.company.application.service.CompanyService;
-
 import logistics.company.domain.entity.Company;
 import logistics.company.infrastructure.client.HubClient;
 import logistics.company.infrastructure.client.UserClient;
@@ -34,6 +20,17 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.*;
+import static org.mockito.Mockito.mock;
 
 @ActiveProfiles("test")
 @SpringBootTest(
@@ -57,7 +54,7 @@ class CompanyServiceIntegrationTest {
 
     private static final String MASTER = "MASTER";
     private static final String NAME = "스파르타수산";
-    private static final String ADDRESS = "부산 동구 중앙대로 206";
+    private static final String ADDRESS = "독도";
 
     @Autowired
     private CompanyService companyService;
