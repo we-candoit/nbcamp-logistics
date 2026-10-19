@@ -21,7 +21,6 @@ import java.util.UUID;
 public class User extends BaseEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false, unique = true, length = 100)
@@ -68,6 +67,7 @@ public class User extends BaseEntity {
     private User(String loginId, String password, String name, String email, String slackId,
                  UserRole role, AffiliationType affiliationType,
                  String affiliationName, AffiliationStatus affiliationStatus) {
+        this.id = UUID.randomUUID();
         this.loginId = loginId;
         this.password = password;
         this.name = name;
@@ -79,7 +79,7 @@ public class User extends BaseEntity {
         this.affiliationName = affiliationName;
         this.affiliationStatus = affiliationStatus;
         this.isPublic = true;
-        initAuditor(loginId); // 생성자, 수정자 설정
+        initAuditor(this.id.toString()); // 생성자, 수정자 설정
     }
 
     // 허브 소속 회원가입
@@ -109,5 +109,11 @@ public class User extends BaseEntity {
     // 배송 담당자 권한 철회
     public void revokeDeliveryManager() {
         this.isDeliveryManager = false;
+    }
+
+    // id를 직접 할당하므로 save() 시 불필요한 SELECT 쿼리 없이 INSERT 하도록 신규 여부 알려준다.
+    @Override
+    public boolean isNew() {
+        return getCreatedAt() == null;
     }
 }
