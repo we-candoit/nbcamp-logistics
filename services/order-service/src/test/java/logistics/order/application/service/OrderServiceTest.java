@@ -65,11 +65,10 @@ class OrderServiceTest {
     //검증 로직은 실제 객체 사용 (목데이터로 실제 검증 흐름까지 확인)
     private final OrderValidator orderValidator = new OrderValidator(userServiceClient);
 
-    private final ClientService clientService = new ClientService(deliveryServiceClient, orderTransactionService, orderValidator);
+    private final ClientService clientService = new ClientService(
+            companyServiceClient, hubServiceClient, deliveryServiceClient, orderValidator);
 
-    private final OrderService orderService = new OrderService(
-            companyServiceClient, hubServiceClient, deliveryServiceClient, orderValidator, orderTransactionService,
-            clientService);
+    private final OrderService orderService = new OrderService(orderValidator, orderTransactionService, clientService);
 
     //===== 목데이터 =====
     private final UUID userId = UUID.randomUUID();

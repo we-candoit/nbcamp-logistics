@@ -5,9 +5,6 @@ import logistics.order.common.AuthContext;
 import logistics.order.domain.entity.Order;
 import logistics.order.domain.entity.OrderItem;
 import logistics.order.domain.enums.OrderStatus;
-import logistics.order.infrastructure.client.CompanyServiceClient;
-import logistics.order.infrastructure.client.DeliveryServiceClient;
-import logistics.order.infrastructure.client.HubServiceClient;
 import logistics.order.infrastructure.client.dto.*;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.CancelOrderResponse;
@@ -23,9 +20,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OrderService {
 
-    private final CompanyServiceClient companyServiceClient;
-    private final HubServiceClient hubServiceClient;
-    private final DeliveryServiceClient deliveryServiceClient;
     private final OrderValidator orderValidator;
     private final OrderTransactionService orderTransactionService;
     private final ClientService clientService;
@@ -34,22 +28,22 @@ public class OrderService {
     public CreateOrderResponse create(CreateOrderRequest request) {
         //올바른 요청 및 상품 인지 검증
         orderValidator.validateOrder(request);
-        FetchItemByIdResponse item = companyServiceClient.fetchItemById(request.getItemId());
+        FetchItemByIdResponse item = clientService.fetchItemById(request.getItemId());
         orderValidator.validateOrderItem(item, request);
 
         //CompanyService API요청 회사정보 조회
-        FetchCompanyByIdResponse requesterCompany = companyServiceClient.fetchCompanyById(request.getRequesterId());
-        FetchCompanyByIdResponse supplierCompany = companyServiceClient.fetchCompanyById(request.getSupplierId());
+        FetchCompanyByIdResponse requesterCompany = clientService.fetchCompanyById(request.getRequesterId());
+        FetchCompanyByIdResponse supplierCompany = clientService.fetchCompanyById(request.getSupplierId());
 
         //주문엔티티 생성 / WAITING 상태
         Order order = buildOrder(request, requesterCompany);
         OrderItem orderItem = buildOrderItem(request, supplierCompany, item, order);
 
         //재고감소
-        hubServiceClient.decreaseStock(supplierCompany.getHubId(), item.getItemId(), request.getQuantity());
+        clientService.decreaseStock(supplierCompany.getHubId(), item.getItemId(), request.getQuantity());
 
         //배송생성
-        CreateDeliveryResponse createDeliveryResponse = deliveryServiceClient.createDelivery(
+        CreateDeliveryResponse createDeliveryResponse = clientService.createDelivery(
                 buildCreateDeliveryRequest(order, orderItem, request)
         );
 
@@ -89,7 +83,14 @@ public class OrderService {
     //주문ID로 주문취소
     public CancelOrderResponse cancelOrderById(UUID orderId) {
         Order order = orderTransactionService.cancel(orderId);
-        clientService.cancelDelivery(order.getDeliveryId(), orderId);
+
+        try {
+            clientService.cancelDelivery(order.getDeliveryId());
+        } catch (RuntimeException e) {
+            //배송취소 실패시 주문상태 CONFIRMED로 복구하는 보상시나리오
+            orderTransactionService.compensateCancelOrder(orderId);
+            throw e;
+        }
 
         return CancelOrderResponse.from(order);
     }

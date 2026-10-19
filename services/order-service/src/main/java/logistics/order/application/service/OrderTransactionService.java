@@ -15,7 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
-
+//주문 DB 트랜잭션 처리
+//상태 변경 메서드는 조회 → 검증(권한/상태) → 변경을 한 트랜잭션 안에서 처리
+//조회 메서드는 데이터만 반환하고, 권한 검증은 호출하는 쪽(OrderService)에서 처리
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
