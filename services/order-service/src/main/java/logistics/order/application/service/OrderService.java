@@ -36,7 +36,7 @@ public class OrderService {
         FetchCompanyByIdResponse supplierCompany = clientService.fetchCompanyById(request.getSupplierId());
 
         //주문엔티티 생성 / WAITING 상태
-        Order order = buildOrder(request, requesterCompany);
+        Order order = buildOrder(AuthContext.getUserId(), request, requesterCompany);
         OrderItem orderItem = buildOrderItem(request, supplierCompany, item, order);
 
         //재고감소
@@ -53,12 +53,7 @@ public class OrderService {
 
         //Slack알림
 
-        return new CreateOrderResponse(
-                order.getId(),
-                orderItem.getItemId(),
-                order.getDeliveryId(),
-                order.getCreatedAt()
-        );
+        return CreateOrderResponse.from(orderItem);
     }
 
     //주문ID로 주문 단건조회
@@ -107,9 +102,9 @@ public class OrderService {
             order
         );
     }
-    private Order buildOrder(CreateOrderRequest request, FetchCompanyByIdResponse requesterCompany) {
+    private Order buildOrder(UUID orderUserId, CreateOrderRequest request, FetchCompanyByIdResponse requesterCompany) {
         return new Order(
-                AuthContext.getUserId(),
+                orderUserId,
                 request.getRequesterId(),
                 requesterCompany.getHubId(),
                 requesterCompany.getAddress(),
