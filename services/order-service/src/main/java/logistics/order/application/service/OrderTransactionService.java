@@ -38,12 +38,12 @@ public class OrderTransactionService {
         if (orderStatus == null) {
             return orderUserId == null
                     ? orderItemRepository.findAllWithOrder()
-                    : orderItemRepository.findAllWithOrder(orderUserId);
+                    : orderItemRepository.findAllWithOrderByOrderUserId(orderUserId);
         }
 
         return orderUserId == null
-                ? orderItemRepository.findAllWithOrder(orderStatus)
-                : orderItemRepository.findAllWithOrder(orderUserId, orderStatus);
+                ? orderItemRepository.findAllWithOrderByStatus(orderStatus)
+                : orderItemRepository.findAllWithOrderByOrderUserIdAndStatus(orderUserId, orderStatus);
     }
 
     //주문 및 주문상품 저장
