@@ -4,12 +4,16 @@ import jakarta.validation.Valid;
 import logistics.company.domain.entity.Company;
 import logistics.company.domain.entity.CompanyItem;
 import logistics.company.infrastructure.repository.CompanyItemRepository;
+import logistics.company.infrastructure.repository.CompanyItemSpecification;
 import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.presentation.dto.request.companyItem.CompanyItemCreateRequest;
+import logistics.company.presentation.dto.request.companyItem.CompanyItemSearchCondition;
 import logistics.company.presentation.dto.response.CompanyItemResponse;
 import logistics.company.presentation.exception.BusinessException;
 import logistics.company.presentation.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,5 +52,23 @@ public class CompanyItemService {
         CompanyItem saved = companyItemRepository.saveAndFlush(item);
 
         return CompanyItemResponse.from(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public CompanyItemResponse getItem(UUID itemId) {
+        CompanyItem item = companyItemRepository.findById(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        return CompanyItemResponse.from(item);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CompanyItemResponse> searchItems(@Valid CompanyItemSearchCondition condition, Pageable pageable) {
+        return companyItemRepository.findAll(
+                CompanyItemSpecification.search(
+                        condition.getItemId(), condition.getCompanyId(),
+                        condition.getItemName(), condition.getCompanyName(), condition.getDescription(),
+                        condition.getMinPrice(), condition.getMaxPrice()
+                ), pageable
+        ).map(CompanyItemResponse::from);
     }
 }

@@ -2,9 +2,17 @@ package logistics.company.presentation.controller;
 
 import jakarta.validation.Valid;
 import logistics.company.application.service.CompanyItemService;
+import logistics.company.presentation.dto.request.company.CompanySearchCondition;
 import logistics.company.presentation.dto.request.companyItem.CompanyItemCreateRequest;
+import logistics.company.presentation.dto.request.companyItem.CompanyItemSearchCondition;
 import logistics.company.presentation.dto.response.CompanyItemResponse;
+import logistics.company.presentation.dto.response.CompanyResponse;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,5 +36,21 @@ public class CompanyItemController {
 
         CompanyItemResponse response = companyItemService.createItem(companyId, userId, role, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // 상품 상세 조회
+    @GetMapping("/api/items/{itemId}")
+    public ResponseEntity<CompanyItemResponse> getItem(@PathVariable("itemId") UUID itemId) {
+        return ResponseEntity.ok(companyItemService.getItem(itemId));
+    }
+
+    // 상품 목록 검색 (업체 내 상품 조회는 ?companyId= 로 처리)
+    @GetMapping("/api/items")
+    public ResponseEntity<Page<CompanyItemResponse>> searchItems(
+            @ParameterObject @Valid @ModelAttribute CompanyItemSearchCondition condition,
+            @ParameterObject @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable
+    ) {
+        return ResponseEntity.ok(companyItemService.searchItems(condition, pageable));
     }
 }

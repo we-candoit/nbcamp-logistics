@@ -20,4 +20,8 @@ public class CompanyItemSearchCondition {
     private String companyName;                 // 업체명 (부분 일치)
 
     private String description;                 // 상품 설명 (부분 일치)
+
+    private Long minPrice;                       // 최소 가격
+
+    private Long maxPrice;                       // 최대 가격
 }
