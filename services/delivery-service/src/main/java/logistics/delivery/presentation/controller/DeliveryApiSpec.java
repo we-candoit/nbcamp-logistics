@@ -14,10 +14,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import logistics.delivery.presentation.dto.request.DeliveryAssignRequest;
 import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
-import logistics.delivery.presentation.dto.response.DeliveryAssignResponse;
-import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
-import logistics.delivery.presentation.dto.response.DeliveryRouteResponse;
-import logistics.delivery.presentation.dto.response.DeliverySearchResponse;
+import logistics.delivery.presentation.dto.request.DeliveryStatusUpdateRequest;
+import logistics.delivery.presentation.dto.response.*;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -339,6 +337,91 @@ public interface DeliveryApiSpec {
             @PathVariable("routeId") UUID routeId,
 
             @Valid @RequestBody DeliveryAssignRequest assignRequest,
+
+            @Parameter(hidden = true)
+            HttpServletRequest request
+    );
+
+    @Operation(
+            summary = "배송 경로 상태 변경",
+            description = """
+                MASTER 또는 해당 배송 경로의 담당자만 변경할 수 있습니다.
+                WAITING → IN_TRANSIT → ARRIVED 순서로 변경합니다.
+                출발하려면 담당자가 배정되어 있어야 하며,
+                이전 배송 경로가 있다면 모두 도착(ARRIVED)해야 합니다.
+                배송 경로 상태가 실제로 변경되면 배송 전체 상태도 함께 갱신합니다.
+                동일 상태 재요청은 변경 없이 현재 결과를 반환합니다.
+                삭제되거나 취소된 배송 및 배송 경로는 변경할 수 없습니다.
+                """
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "상태 변경 성공 또는 동일 상태 재요청",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = DeliveryStatusUpdateResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "요청 형식, 필수값 오류 또는 허용하지 않는 요청 상태",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "필수 사용자 정보 누락",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "MASTER 또는 해당 배송 경로 담당자가 아님",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "배송, 배송 경로 없음, 삭제됨 또는 배송 소속 불일치",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "상태 전이 불가, 담당자 미배정, 선행 배송 경로 미도착 또는 취소됨",
+                    content = @Content
+            )
+    })
+    @Parameters({
+            @Parameter(
+                    name = "X-User-Id",
+                    in = ParameterIn.HEADER,
+                    required = true,
+                    description = "상태 변경 요청자의 사용자 ID",
+                    schema = @Schema(type = "string", format = "uuid")
+            ),
+            @Parameter(
+                    name = "X-User-Name",
+                    in = ParameterIn.HEADER,
+                    required = true,
+                    description = "감사 기록에 사용할 요청자 username"
+            ),
+            @Parameter(
+                    name = "X-Role-Name",
+                    in = ParameterIn.HEADER,
+                    required = true,
+                    schema = @Schema(
+                            type = "string",
+                            allowableValues = {"USER", "MASTER"}
+                    )
+            )
+    })
+    ResponseEntity<DeliveryStatusUpdateResponse> updateDeliveryStatus(
+            @Parameter(description = "배송 ID", required = true)
+            @PathVariable("deliveryId") UUID deliveryId,
+
+            @Parameter(description = "배송 경로 ID", required = true)
+            @PathVariable("routeId") UUID routeId,
+
+            @Valid @RequestBody DeliveryStatusUpdateRequest updateRequest,
 
             @Parameter(hidden = true)
             HttpServletRequest request

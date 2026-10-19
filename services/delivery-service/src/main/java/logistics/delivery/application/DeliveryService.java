@@ -3,6 +3,7 @@ package logistics.delivery.application;
 import logistics.delivery.presentation.dto.request.DeliveryAssignRequest;
 import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
 import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
+import logistics.delivery.presentation.dto.request.DeliveryStatusUpdateRequest;
 import logistics.delivery.presentation.dto.response.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -43,6 +44,14 @@ public interface DeliveryService {
             UUID deliveryId,
             UUID routeId,
             DeliveryAssignRequest request,
+            UUID requesterId,
+            String role
+    );
+
+    DeliveryStatusUpdateResponse updateDeliveryStatus(
+            UUID deliveryId,
+            UUID routeId,
+            DeliveryStatusUpdateRequest request,
             UUID requesterId,
             String role
     );
