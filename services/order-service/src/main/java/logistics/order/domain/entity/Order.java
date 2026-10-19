@@ -16,7 +16,7 @@ import java.util.UUID;
 public class Order extends BaseEntity {
 
     @Id
-    private UUID id = UUID.randomUUID();
+    private final UUID id = UUID.randomUUID();
 
     @Column(nullable = false, updatable = false)
     private UUID orderUserId;
