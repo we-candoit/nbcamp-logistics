@@ -4,20 +4,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import logistics.delivery.application.DeliveryService;
 import logistics.delivery.presentation.dto.request.DeliveryAssignRequest;
 import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
-import logistics.delivery.presentation.dto.response.DeliveryAssignResponse;
-import logistics.delivery.presentation.dto.response.DeliveryDetailResponse;
-import logistics.delivery.presentation.dto.response.DeliveryRouteResponse;
-import logistics.delivery.presentation.dto.response.DeliverySearchResponse;
+import logistics.delivery.presentation.dto.request.DeliveryStatusUpdateRequest;
+import logistics.delivery.presentation.dto.response.*;
 import logistics.delivery.presentation.interceptor.AuthInterceptor;
 import logistics.delivery.presentation.util.DeliveryPageableUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
@@ -77,15 +72,30 @@ public class DeliveryApi implements DeliveryApiSpec{
 
         UUID requesterId = AuthInterceptor.getUserId(request);
 
+        String role = (String) request.getAttribute(AuthInterceptor.ROLE_HEADER);
+
+        DeliveryAssignResponse response = deliveryService.assignDeliveryManager(
+                deliveryId, routeId, assignRequest, requesterId, role);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @Override
+    @PatchMapping("/{deliveryId}/routes/{routeId}/status")
+    public ResponseEntity<DeliveryStatusUpdateResponse> updateDeliveryStatus(
+            UUID deliveryId, UUID routeId, DeliveryStatusUpdateRequest updateRequest, HttpServletRequest request) {
+
+        UUID requesterId = AuthInterceptor.getUserId(request);
+
         String role = (String) request.getAttribute(
                 AuthInterceptor.ROLE_HEADER
         );
 
-        DeliveryAssignResponse response =
-                deliveryService.assignDeliveryManager(
+        DeliveryStatusUpdateResponse response =
+                deliveryService.updateDeliveryStatus(
                         deliveryId,
                         routeId,
-                        assignRequest,
+                        updateRequest,
                         requesterId,
                         role
                 );

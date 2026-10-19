@@ -18,6 +18,7 @@ import logistics.delivery.infrastructure.repository.DeliverySpecification;
 import logistics.delivery.presentation.dto.request.DeliveryAssignRequest;
 import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
 import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
+import logistics.delivery.presentation.dto.request.DeliveryStatusUpdateRequest;
 import logistics.delivery.presentation.dto.response.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.AuditorAware;
@@ -503,6 +504,92 @@ public class DeliveryServiceImpl implements DeliveryService{
             throw new ResponseStatusException(
                     HttpStatus.valueOf(422), "배송 경로의 출발 허브에 소속된 담당자만 배정할 수 있습니다."
             );
+        }
+    }
+
+    /**
+     * 배송 상태 변경
+     * 요청자의 변경 권한과 배송 진행 순서를 검증한 뒤 배송 경로 상태 변경
+     * 실제 변경 발생 시 배송 전체 상태도 같은 트랜잭션으로 처리
+     * @param deliveryId 상태 변경 대상 배송ID
+     * @param routeId 상태 변경 대상 배송경로ID
+     * @param request 변경할 배송 경로 상태
+     * @param requesterId 상태 변경을 요청한 사용자ID
+     * @param role 요청 사용자 권한
+     * @return 배송 경로 상태, 배송 전체 상태
+     */
+    @Override
+    @Transactional
+    public DeliveryStatusUpdateResponse updateDeliveryStatus(
+            UUID deliveryId, UUID routeId, DeliveryStatusUpdateRequest request, UUID requesterId, String role) {
+        if (!"MASTER".equals(role) && !"USER".equals(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "허용되지 않은 권한입니다.");
+        }
+
+        if (requesterId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "요청자 정보를 확인할 수 없습니다.");
+        }
+
+        Delivery delivery = deliveryRepository.findByIdAndDeletedAtIsNull(deliveryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송을 찾을 수 없습니다."));
+
+        DeliveryRoute route = deliveryRouteRepository.findByIdAndDeliveryIdAndDeletedAtIsNull(routeId, deliveryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송 경로를 찾을 수 없습니다."));
+
+        if (!"MASTER".equals(role) && !requesterId.equals(route.getManagerId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 배송 경로의 담당자만 상태를 변경할 수 있습니다."
+            );
+        }
+
+        if (delivery.getStatus() == DeliveryStatus.CANCELLED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "취소된 배송은 상태를 변경할 수 없습니다.");
+        }
+
+        try {
+            if (route.getStatus() == DeliveryRouteStatus.WAITING
+                    && request.status() == DeliveryRouteStatus.IN_TRANSIT) {
+                validatePreviousRoutesArrived(delivery, route);
+            }
+
+            boolean changed = route.updateStatus(request.status());
+
+            if (changed) {
+                delivery.updateStatusByRoute(route.getType(), route.getStatus());
+            }
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        }
+
+        return DeliveryStatusUpdateResponse.from(delivery, route);
+    }
+
+    /**
+     * 출발 배송 경로보다 이전 배송 경로가 모두 도착했는지 검증하는 private 메서드
+     * 배송 경로의 1구간은 이전 배송 경로가 없으므로 생략
+     * @param delivery 상태 변경 대상 배송
+     * @param route 출발하려는 배송 경로
+     */
+    private void validatePreviousRoutesArrived(Delivery delivery, DeliveryRoute route){
+        // 첫 번째 경로는 이전 경로 상태 검사 생략
+        if (route.getSequence() == 1) return;
+
+        List<DeliveryRoute> previousRoutes = deliveryRouteRepository
+                .findAllByDeliveryIdAndDeletedAtIsNullOrderBySequenceAsc(delivery.getId())
+                .stream()
+                .filter(previous -> previous.getSequence() < route.getSequence())
+                .toList();
+
+        if(previousRoutes.isEmpty()){
+            throw new IllegalStateException("이전 배송 경로를 확인할 수 없습니다.");
+        }
+
+        boolean allArrived = previousRoutes.stream()
+                .allMatch(previous -> previous.getStatus() == DeliveryRouteStatus.ARRIVED);
+
+        if(!allArrived){
+            throw new IllegalStateException("이전 배송 경로가 모두 도착해야 출발할 수 있습니다.");
         }
     }
 }
