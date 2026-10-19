@@ -11,8 +11,8 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class AuthInterceptor implements HandlerInterceptor {
 
     // Gateway가 보내는 헤더 이름 (Gateway 확정 후 수정)
-    public static final String LOGIN_ID_HEADER = "X-User-Login-Id";
-    public static final String ROLE_HEADER = "X-User-Role";
+    public static final String LOGIN_ID_HEADER = "X-User-Id";
+    public static final String ROLE_HEADER = "X-Role-Name";
 
     // Controller 진입 전: 헤더가 올바르면 Holder에 저장
     // 헤더가 없거나 형식이 틀리면 저장하지 않음 → 로그인이 필요한 곳에서 getRequired()가 401 처리
