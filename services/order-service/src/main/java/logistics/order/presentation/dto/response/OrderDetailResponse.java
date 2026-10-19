@@ -2,7 +2,6 @@ package logistics.order.presentation.dto.response;
 
 import logistics.order.domain.entity.Order;
 import logistics.order.domain.entity.OrderItem;
-import logistics.order.domain.enums.OrderItemStatus;
 import logistics.order.domain.enums.OrderStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,7 +12,7 @@ import java.util.UUID;
 
 @Data
 @AllArgsConstructor @NoArgsConstructor
-public class GetOrderByIdResponse {
+public class OrderDetailResponse {
 
     private UUID orderId;
     private UUID deliveryId;
@@ -36,10 +35,10 @@ public class GetOrderByIdResponse {
         private Long totalPrice;
     }
 
-    public static GetOrderByIdResponse from(OrderItem orderItem) {
+    public static OrderDetailResponse from(OrderItem orderItem) {
         Order order = orderItem.getOrder();
 
-        return new GetOrderByIdResponse(
+        return new OrderDetailResponse(
                 order.getId(),
                 order.getDeliveryId(),
                 order.getOrderUserId(),
