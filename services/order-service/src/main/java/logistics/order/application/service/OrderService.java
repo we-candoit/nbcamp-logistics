@@ -5,9 +5,6 @@ import logistics.order.common.AuthContext;
 import logistics.order.domain.entity.Order;
 import logistics.order.domain.entity.OrderItem;
 import logistics.order.domain.enums.OrderStatus;
-import logistics.order.infrastructure.client.CompanyServiceClient;
-import logistics.order.infrastructure.client.DeliveryServiceClient;
-import logistics.order.infrastructure.client.HubServiceClient;
 import logistics.order.infrastructure.client.dto.*;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.CancelOrderResponse;
@@ -23,9 +20,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OrderService {
 
-    private final CompanyServiceClient companyServiceClient;
-    private final HubServiceClient hubServiceClient;
-    private final DeliveryServiceClient deliveryServiceClient;
     private final OrderValidator orderValidator;
     private final OrderTransactionService orderTransactionService;
     private final ClientService clientService;
@@ -34,23 +28,23 @@ public class OrderService {
     public CreateOrderResponse create(CreateOrderRequest request) {
         //올바른 요청 및 상품 인지 검증
         orderValidator.validateOrder(request);
-        FetchItemByIdResponse item = companyServiceClient.fetchItemById(request.getItemId());
+        FetchItemByIdResponse item = clientService.fetchItemById(request.getItemId());
         orderValidator.validateOrderItem(item, request);
 
         //CompanyService API요청 회사정보 조회
-        FetchCompanyByIdResponse requesterCompany = companyServiceClient.fetchCompanyById(request.getRequesterId());
-        FetchCompanyByIdResponse supplierCompany = companyServiceClient.fetchCompanyById(request.getSupplierId());
+        FetchCompanyByIdResponse requesterCompany = clientService.fetchCompanyById(request.getRequesterId());
+        FetchCompanyByIdResponse supplierCompany = clientService.fetchCompanyById(request.getSupplierId());
 
         //주문엔티티 생성 / WAITING 상태
-        Order order = buildOrder(request, requesterCompany);
+        Order order = buildOrder(AuthContext.getUserId(), request, requesterCompany);
         OrderItem orderItem = buildOrderItem(request, supplierCompany, item, order);
 
         //재고감소
-        hubServiceClient.decreaseStock(supplierCompany.getHubId(), item.getItemId(), request.getQuantity());
+        clientService.decreaseStock(supplierCompany.getHubId(), item.getItemId(), request.getQuantity());
 
         //배송생성
-        CreateDeliveryResponse createDeliveryResponse = deliveryServiceClient.createDelivery(
-                buildCreateDeliveryRequest(order, orderItem, request)
+        CreateDeliveryResponse createDeliveryResponse = clientService.createDelivery(
+                CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
         );
 
         //주문저장
@@ -59,12 +53,7 @@ public class OrderService {
 
         //Slack알림
 
-        return new CreateOrderResponse(
-                order.getId(),
-                orderItem.getItemId(),
-                order.getDeliveryId(),
-                order.getCreatedAt()
-        );
+        return CreateOrderResponse.from(orderItem);
     }
 
     //주문ID로 주문 단건조회
@@ -76,13 +65,11 @@ public class OrderService {
     }
 
     //STATUS에 맞는 주문 목록조회, 만약 STATUS 비어 있으면 주문 전체조회
-    public OrderListResponse getOrdersByStatus(String status) {
-        orderValidator.validateOrderStatus(status);
-
+    public OrderListResponse getOrdersByStatus(OrderStatus orderStatus) {
         //MASTER는 모든 주문, 그 외는 본인이 생성한 주문만
         UUID orderUserId = AuthContext.isMaster() ? null : AuthContext.getUserId();
 
-        return new OrderListResponse(orderTransactionService.findAllWithOrder(orderUserId, status)
+        return new OrderListResponse(orderTransactionService.findAllWithOrder(orderUserId, orderStatus)
                 .stream().map(OrderDetailResponse::from)
                 .toList()
         );
@@ -91,7 +78,14 @@ public class OrderService {
     //주문ID로 주문취소
     public CancelOrderResponse cancelOrderById(UUID orderId) {
         Order order = orderTransactionService.cancel(orderId);
-        clientService.cancelDelivery(order.getDeliveryId(), orderId);
+
+        try {
+            clientService.cancelDelivery(order.getDeliveryId());
+        } catch (RuntimeException e) {
+            //배송취소 실패시 주문상태 CONFIRMED로 복구하는 보상시나리오
+            orderTransactionService.compensateCancelOrder(orderId);
+            throw e;
+        }
 
         return CancelOrderResponse.from(order);
     }
@@ -108,26 +102,13 @@ public class OrderService {
             order
         );
     }
-    private Order buildOrder(CreateOrderRequest request, FetchCompanyByIdResponse requesterCompany) {
+    private Order buildOrder(UUID orderUserId, CreateOrderRequest request, FetchCompanyByIdResponse requesterCompany) {
         return new Order(
-                AuthContext.getUserId(),
+                orderUserId,
                 request.getRequesterId(),
                 requesterCompany.getHubId(),
                 requesterCompany.getAddress(),
                 request.getRequestNote()
-        );
-    }
-
-    //배송생성 API Request 빌드
-    private CreateDeliveryRequest buildCreateDeliveryRequest(Order order, OrderItem orderItems,
-                                                             CreateOrderRequest createOrderDto) {
-        return new CreateDeliveryRequest(
-                order.getId(),
-                orderItems.getDepartureHubId(),
-                order.getDestinationHubId(),
-                order.getAddress(),
-                createOrderDto.getRecipientName(),
-                createOrderDto.getRecipientPhone()
         );
     }
 

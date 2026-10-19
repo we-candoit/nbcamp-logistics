@@ -1,16 +1,14 @@
 package logistics.order.application.validator;
 
 import logistics.order.common.AuthContext;
-import logistics.order.domain.entity.Order;
-import logistics.order.domain.enums.OrderStatus;
 import logistics.order.infrastructure.client.UserServiceClient;
 import logistics.order.infrastructure.client.dto.CancelDeliveryResponse;
 import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
 import logistics.order.infrastructure.client.enums.DeliveryStatus;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -54,25 +52,6 @@ public class OrderValidator {
     public void validateOrderOwner(UUID orderUserId) {
         if (!AuthContext.isMaster()) {
             validateEqual(orderUserId, AuthContext.getUserId(), ErrorCode.C403_FORBIDDEN_ORDER);
-        }
-    }
-
-    //조회할 주문상태가 유효한가? / 없으면 null(전체), 유효하지 않으면 예외 (대소문자 구분)
-    public void validateOrderStatus(String status) {
-        try {
-            if (status == null) {
-                return ;
-            }
-            OrderStatus.valueOf(status);
-        } catch (IllegalArgumentException e) {
-            throw new CustomException(ErrorCode.C400_INVALID_ORDER_STATUS);
-        }
-    }
-
-    //취소 가능한 주문인가? / 배송 전(CONFIRMED) 상태에서만 가능
-    public void validateCancelable(Order order) {
-        if (!order.isCancelable()) {
-            throw new CustomException(ErrorCode.C409_INVALID_ORDER_STATUS);
         }
     }
 

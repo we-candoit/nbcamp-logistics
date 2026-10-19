@@ -1,5 +1,7 @@
 package logistics.order.presentation.dto.response;
 
+import logistics.order.domain.entity.Order;
+import logistics.order.domain.entity.OrderItem;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -14,4 +16,14 @@ public class CreateOrderResponse {
     private UUID deliveryId;
     private LocalDateTime createdAt;
 
+    public static CreateOrderResponse from(OrderItem orderItem) {
+        Order order = orderItem.getOrder();
+
+        return new CreateOrderResponse(
+                order.getId(),
+                orderItem.getItemId(),
+                order.getDeliveryId(),
+                order.getCreatedAt()
+        );
+    }
 }

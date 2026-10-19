@@ -10,8 +10,8 @@ import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
 import logistics.order.presentation.dto.response.OrderDetailResponse;
 import logistics.order.presentation.dto.response.OrderListResponse;
-import logistics.order.presentation.exception.CustomException;
-import logistics.order.presentation.exception.ErrorCode;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -526,7 +527,7 @@ class OrderControllerTest {
         @Test
         public void 상태를_지정하면_서비스에_그대로_전달한다() throws Exception {
             //given
-            given(orderService.getOrdersByStatus("CONFIRMED")).willReturn(new OrderListResponse(List.of()));
+            given(orderService.getOrdersByStatus(OrderStatus.CONFIRMED)).willReturn(new OrderListResponse(List.of()));
 
             //when, then
             mockMvc.perform(get("/api/orders").param("status", "CONFIRMED")
@@ -535,21 +536,36 @@ class OrderControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.orders").isEmpty());
 
-            verify(orderService).getOrdersByStatus("CONFIRMED");
+            verify(orderService).getOrdersByStatus(OrderStatus.CONFIRMED);
         }
 
         @Test
-        public void 유효하지_않은_상태면_400을_반환한다() throws Exception {
+        public void 상태가_빈_값이면_상태_없이_전체를_조회한다() throws Exception {
             //given
-            given(orderService.getOrdersByStatus("SHIPPING"))
-                    .willThrow(new CustomException(ErrorCode.C400_INVALID_ORDER_STATUS));
+            given(orderService.getOrdersByStatus(null)).willReturn(new OrderListResponse(List.of()));
 
             //when, then
-            mockMvc.perform(get("/api/orders").param("status", "SHIPPING")
+            mockMvc.perform(get("/api/orders").param("status", "")
+                            .header(AuthHeaders.USER_ID, userId.toString())
+                            .header(AuthHeaders.ROLE, "MASTER"))
+                    .andExpect(status().isOk());
+
+            verify(orderService).getOrdersByStatus(null);
+        }
+
+        //enum 변환은 Spring이 처리 / 존재하지 않거나 대소문자가 다르면 변환 실패로 400
+        @ParameterizedTest
+        @ValueSource(strings = {"SHIPPING", "confirmed", "CANCELED"})
+        public void 유효하지_않은_상태면_400을_반환하고_서비스를_호출하지_않는다(String status) throws Exception {
+            //when, then
+            mockMvc.perform(get("/api/orders").param("status", status)
                             .header(AuthHeaders.USER_ID, userId.toString())
                             .header(AuthHeaders.ROLE, "MASTER"))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.status").value(400));
+                    .andExpect(jsonPath("$.status").value(400))
+                    .andExpect(jsonPath("$.message").value("status: 형식이 올바르지 않습니다."));
+
+            verify(orderService, never()).getOrdersByStatus(any());
         }
 
         @Test

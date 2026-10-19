@@ -1,6 +1,8 @@
 package logistics.order.presentation.exception;
 
 import feign.FeignException;
+import logistics.order.common.exception.CustomException;
+import logistics.order.common.exception.ErrorCode;
 import logistics.order.presentation.dto.response.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -64,10 +66,12 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(status.value(), e.getName() + ": 형식이 올바르지 않습니다.", LocalDateTime.now()));
     }
 
+    //외부 서비스 호출 실패 / 사용자에게 의미 있는 실패는 ClientService에서 CustomException으로 변환
+    //Feign 메시지에 내부 서비스 주소, 응답 본문이 포함되어 로그로만 남기고 정해진 문구로 응답
     @ExceptionHandler(FeignException.class)
     public ResponseEntity<ErrorResponse> handleFeignException(FeignException e) {
 
-        //응답 자체를 받지 못한 경우(타임아웃, 연결 실패 등) status가 -1
+        //응답 자체를 받지 못한 경우(타임아웃, 연결 실패 등) status가 -1 → 503
         if (e.status() < 0) {
             log.error("외부 서비스 응답 없음", e);
             HttpStatus status = HttpStatus.SERVICE_UNAVAILABLE;
@@ -77,9 +81,13 @@ public class GlobalExceptionHandler {
                     .body(new ErrorResponse(status.value(), "외부 서비스에 연결할 수 없습니다.", LocalDateTime.now()));
         }
 
+        //응답은 받았지만 실패 → 외부 상태코드를 그대로 쓰지 않고 502
+        log.error("외부 서비스 호출 실패 status={}", e.status(), e);
+        HttpStatus status = HttpStatus.BAD_GATEWAY;
+
         return ResponseEntity
-                .status(e.status())
-                .body(new ErrorResponse(e.status(), e.getMessage(), LocalDateTime.now()));
+                .status(status)
+                .body(new ErrorResponse(status.value(), "외부 서비스 처리 중 오류가 발생했습니다.", LocalDateTime.now()));
     }
 
     //위에서 처리하지 못한 모든 예외 / 내부 메시지는 로그로만 남기고 정해진 문구로 응답
