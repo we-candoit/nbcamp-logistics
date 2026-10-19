@@ -42,8 +42,10 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -494,6 +496,92 @@ class OrderControllerTest {
                     .andExpect(status().isUnauthorized());
 
             verify(orderService, never()).cancelOrderById(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("주문 삭제")
+    class DeleteOrder {
+
+        private MockHttpServletRequestBuilder deleteRequest(Object orderId) {
+            return delete("/api/orders/{orderId}", orderId)
+                    .header(AuthHeaders.USER_ID, userId.toString())
+                    .header(AuthHeaders.ROLE, "MASTER");
+        }
+
+        @Test
+        public void 정상_요청이면_204를_반환한다() throws Exception {
+            //when, then
+            mockMvc.perform(deleteRequest(orderId))
+                    .andExpect(status().isNoContent());
+
+            verify(orderService).deleteOrderById(orderId);
+        }
+
+        @Test
+        public void 배송이_삭제되지_않으면_409를_반환한다() throws Exception {
+            //given
+            willThrow(new CustomException(ErrorCode.C409_ORDER_NOT_DELETABLE))
+                    .given(orderService).deleteOrderById(orderId);
+
+            //when, then
+            mockMvc.perform(deleteRequest(orderId))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.status").value(409));
+        }
+
+        @Test
+        public void 취소되지_않은_주문이면_409를_반환한다() throws Exception {
+            //given
+            willThrow(new CustomException(ErrorCode.C409_INVALID_ORDER_STATUS))
+                    .given(orderService).deleteOrderById(orderId);
+
+            //when, then
+            mockMvc.perform(deleteRequest(orderId))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.status").value(409));
+        }
+
+        @Test
+        public void 다른_사람의_주문이면_403을_반환한다() throws Exception {
+            //given
+            willThrow(new CustomException(ErrorCode.C403_FORBIDDEN_ORDER))
+                    .given(orderService).deleteOrderById(orderId);
+
+            //when, then
+            mockMvc.perform(deleteRequest(orderId))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.status").value(403));
+        }
+
+        @Test
+        public void 없는_주문이면_404를_반환한다() throws Exception {
+            //given
+            willThrow(new CustomException(ErrorCode.C404_ORDER_NOT_FOUND))
+                    .given(orderService).deleteOrderById(orderId);
+
+            //when, then
+            mockMvc.perform(deleteRequest(orderId))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        public void 주문ID가_UUID_형식이_아니면_400을_반환하고_서비스를_호출하지_않는다() throws Exception {
+            //when, then
+            mockMvc.perform(deleteRequest("abc"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("orderId: 형식이 올바르지 않습니다."));
+
+            verify(orderService, never()).deleteOrderById(any());
+        }
+
+        @Test
+        public void 인증_헤더가_없으면_401을_반환한다() throws Exception {
+            //when, then
+            mockMvc.perform(delete("/api/orders/{orderId}", orderId))
+                    .andExpect(status().isUnauthorized());
+
+            verify(orderService, never()).deleteOrderById(any());
         }
     }
 
