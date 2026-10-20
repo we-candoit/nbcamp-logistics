@@ -1,6 +1,9 @@
 package logistics.company.application.service;
 
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 import logistics.company.domain.entity.Company;
+import logistics.company.domain.entity.CompanyItem;
 import logistics.company.infrastructure.client.HubClient;
 import logistics.company.infrastructure.client.UserClient;
 import logistics.company.infrastructure.client.dto.UserResponse;
