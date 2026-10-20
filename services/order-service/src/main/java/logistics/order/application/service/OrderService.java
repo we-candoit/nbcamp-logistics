@@ -51,10 +51,12 @@ public class OrderService {
             orderTransactionService.save(order, orderItem);
         } catch (RuntimeException e) {
             orderCompensator.compensateCreate(progress);
+            clientService.sendSlackDm("U0CA7AA95M5", "주문실패");
             throw e;
         }
 
         //Slack알림
+        clientService.sendSlackDm("U0CA7AA95M5", "주문성공");
 
         return CreateOrderResponse.from(orderItem);
     }
