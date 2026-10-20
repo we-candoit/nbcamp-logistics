@@ -7,6 +7,7 @@ import feign.Response;
 import logistics.delivery.infrastructure.client.HubClient;
 import logistics.delivery.infrastructure.client.OrderClient;
 import logistics.delivery.infrastructure.client.UserClient;
+import logistics.delivery.infrastructure.client.dto.UserApiResponse;
 import logistics.delivery.infrastructure.client.dto.UserDetailResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -296,7 +297,8 @@ class DeliveryManagerAssignmentIntegrationTest {
             case "pending" -> new UserDetailResponse(managerId, true, "HUB", "PENDING", originHubId);
             default -> new UserDetailResponse(managerId, true, "HUB", "CONFIRMED", destinationHubId);
         };
-        when(userClient.getUserDetail(managerId, requesterId, "MASTER")).thenReturn(user);
+        when(userClient.getUserDetail(managerId, requesterId, "MASTER"))
+                .thenReturn(new UserApiResponse<>(true, null, user));
         State before = snapshot();
         assertThat(put(hubRouteId).statusCode()).isEqualTo(422);
         assertThat(snapshot()).isEqualTo(before);
@@ -324,7 +326,8 @@ class DeliveryManagerAssignmentIntegrationTest {
             case "missingStatus" -> new UserDetailResponse(managerId, true, "HUB", null, originHubId);
             default -> new UserDetailResponse(managerId, true, "HUB", "CONFIRMED", null);
         };
-        when(userClient.getUserDetail(managerId, requesterId, "MASTER")).thenReturn(user);
+        when(userClient.getUserDetail(managerId, requesterId, "MASTER"))
+                .thenReturn(new UserApiResponse<>(true, null, user));
         State before = snapshot();
         assertThat(put(hubRouteId).statusCode()).isEqualTo(503);
         assertThat(snapshot()).isEqualTo(before);
@@ -378,9 +381,28 @@ class DeliveryManagerAssignmentIntegrationTest {
         verifyNoInteractions(userClient);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"emptyResponse", "failed", "missingSuccess", "missingData"})
+    @DisplayName("사용자 API의 실패·불완전한 응답은 503으로 거절하고 배정 상태를 유지한다")
+    void rejectsInvalidUserApiResponse(String scenario) throws Exception {
+        UserDetailResponse user = new UserDetailResponse(managerId, true, "HUB", "CONFIRMED", originHubId);
+        UserApiResponse<UserDetailResponse> response = switch (scenario) {
+            case "emptyResponse" -> null;
+            case "failed" -> new UserApiResponse<>(false, "조회 실패", user);
+            case "missingSuccess" -> new UserApiResponse<>(null, null, user);
+            default -> new UserApiResponse<>(true, null, null);
+        };
+        when(userClient.getUserDetail(managerId, requesterId, "MASTER")).thenReturn(response);
+        State before = snapshot();
+
+        assertThat(put(hubRouteId).statusCode()).isEqualTo(503);
+        assertThat(snapshot()).isEqualTo(before);
+    }
+
     private void mockEligibleUser(UUID hubId) {
         when(userClient.getUserDetail(managerId, requesterId, "MASTER"))
-                .thenReturn(new UserDetailResponse(managerId, true, "HUB", "CONFIRMED", hubId));
+                .thenReturn(new UserApiResponse<>(true, null,
+                        new UserDetailResponse(managerId, true, "HUB", "CONFIRMED", hubId)));
     }
 
     private FeignException feignFailure(int status) {
