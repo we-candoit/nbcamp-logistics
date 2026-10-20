@@ -65,4 +65,15 @@ public class UserController {
         ApiResponse<UserDetailResponse> apiResponse = ApiResponse.ok("업체 소속이 확정되었습니다.", myProfile);
         return ResponseEntity.ok(apiResponse);
     }
+
+    // 유저 삭제 - 관리자 전용 (soft delete)
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(
+            @PathVariable("id") UUID id,
+            @RequestHeader(UserHeaders.USER_ID) UUID requesterId,
+            @RequestHeader(UserHeaders.ROLE_NAME) UserRole role
+    ) {
+        userService.deleteUser(requesterId, id, role);
+        return ResponseEntity.noContent().build();
+    }
 }
