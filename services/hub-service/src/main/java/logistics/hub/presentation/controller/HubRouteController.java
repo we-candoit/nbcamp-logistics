@@ -30,16 +30,4 @@ public class HubRouteController {
     public HubRouteResponse getHubRoute(@PathVariable("routeId") UUID routeId) {
         return hubRouteService.getHubRoute(routeId);
     }
-
-    // 출발 허브와 도착 허브간 이동 경로 조회
-    @GetMapping("/routes/by-hubs")
-    public HubRouteResponse getRouteByHubs(
-            @RequestParam UUID originHubId,
-            @RequestParam UUID destinationHubId
-    ) {
-        return hubRouteService.getRouteByHubs(
-                originHubId,
-                destinationHubId
-        );
-    }
 }

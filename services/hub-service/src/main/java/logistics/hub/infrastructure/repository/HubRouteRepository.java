@@ -23,6 +23,7 @@ public interface HubRouteRepository
             UUID destinationHubId
     );
 
+    @EntityGraph(attributePaths = {"originHub", "destinationHub"})
     Optional<HubRoute> findByOriginHub_IdAndDestinationHub_IdAndDeletedAtIsNull(
             UUID originHubId,
             UUID destinationHubId

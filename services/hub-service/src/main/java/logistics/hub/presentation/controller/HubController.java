@@ -1,7 +1,7 @@
 package logistics.hub.presentation.controller;
 
-import logistics.hub.presentation.dto.response.HubResponse;
 import logistics.hub.application.service.HubService;
+import logistics.hub.presentation.dto.response.HubResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
