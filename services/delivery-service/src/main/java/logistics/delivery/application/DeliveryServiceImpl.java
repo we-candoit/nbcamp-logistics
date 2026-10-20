@@ -1,14 +1,15 @@
 package logistics.delivery.application;
 
-import feign.FeignException;
+import logistics.delivery.common.exception.DeliveryErrorCode;
+import logistics.delivery.common.exception.DeliveryException;
 import logistics.delivery.domain.entity.Delivery;
 import logistics.delivery.domain.entity.DeliveryRoute;
 import logistics.delivery.domain.enums.DeliveryRouteStatus;
 import logistics.delivery.domain.enums.DeliveryStatus;
 import logistics.delivery.domain.enums.RouteType;
-import logistics.delivery.infrastructure.client.HubClient;
-import logistics.delivery.infrastructure.client.OrderClient;
-import logistics.delivery.infrastructure.client.UserClient;
+import logistics.delivery.infrastructure.client.HubClientAdapter;
+import logistics.delivery.infrastructure.client.OrderClientAdapter;
+import logistics.delivery.infrastructure.client.UserClientAdapter;
 import logistics.delivery.infrastructure.client.dto.HubRouteResponse;
 import logistics.delivery.infrastructure.client.dto.OrderDetailResponse;
 import logistics.delivery.infrastructure.client.dto.UserDetailResponse;
@@ -25,10 +26,8 @@ import org.springframework.data.domain.AuditorAware;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -43,10 +42,9 @@ public class DeliveryServiceImpl implements DeliveryService{
     private final DeliveryRepository deliveryRepository;
     private final DeliveryRouteRepository deliveryRouteRepository;
     private final AuditorAware<UUID> auditorAware;
-    private final HubClient hubClient;
-    private final OrderClient orderClient;
-    private final UserClient userClient;
-
+    private final HubClientAdapter hubClientAdapter;
+    private final OrderClientAdapter orderClientAdapter;
+    private final UserClientAdapter userClientAdapter;
 
     /**
      * 배송 목록 조회 및 검색
@@ -64,11 +62,11 @@ public class DeliveryServiceImpl implements DeliveryService{
             String role
     ) {
         if(!"MASTER".equals(role) && !"USER".equals(role)){
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "허용되지 않은 권한입니다,");
+            throw new DeliveryException(DeliveryErrorCode.ACCESS_DENIED);
         }
 
         if(userId == null){
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "요청자 정보를 확인할 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.REQUESTER_REQUIRED);
         }
 
         Specification<Delivery> specification =
@@ -122,11 +120,11 @@ public class DeliveryServiceImpl implements DeliveryService{
 
         // 조회 권한 검증
         if(!"MASTER".equals(role) && !"USER".equals(role)){
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "허용되지 않은 권한입니다.");
+            throw new DeliveryException(DeliveryErrorCode.ACCESS_DENIED);
         }
 
         Delivery delivery = deliveryRepository.findByIdAndDeletedAtIsNull(deliveryId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송을 찾을 수 없습니다."));
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
 
         // MASTER, 배송 또는 배송 경로 담당자는 바로 조회 허용
         if("MASTER".equals(role) || isDeliveryManager(delivery, userId)){
@@ -134,32 +132,12 @@ public class DeliveryServiceImpl implements DeliveryService{
         }
 
         // 나머지 사용자는 해당 배송의 주문자인지 확인
-        OrderDetailResponse order;
-
-        try{
-            order = orderClient.getOrderDetail(
-                    delivery.getOrderId(),
-                    userId,
-                    role
-            );
-        } catch (FeignException e){
-            if(e.status() == 403 || e.status() == 404){
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "배송을 찾을 수 없습니다.");
-            }
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "주문자 정보를 확인할 수 없습니다.", e);
-        }
-        if(order == null
-                || order.orderUserId() == null
-                || !delivery.getOrderId().equals(order.orderId())){
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "주문 서비스의 응답을 확인할 수 없습니다.");
-        }
+        OrderDetailResponse order = orderClientAdapter.getOrderForDeliveryAccess(
+                delivery.getOrderId(), userId, role);
 
         // 조회 권한이 없는 사용자에게 배송 존재여부를 숨기기 위해 404로 통일
         if (!userId.equals(order.orderUserId())) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "배송을 찾을 수 없습니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND);
         }
 
         return delivery;
@@ -212,9 +190,7 @@ public class DeliveryServiceImpl implements DeliveryService{
 
         if (existingDelivery != null) {
             if (existingDelivery.getDeletedAt() != null) {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT, "이미 삭제된 배송은 다시 생성할 수 없습니다."
-                );
+                throw new DeliveryException(DeliveryErrorCode.DELETED_DELIVERY_RECREATION_NOT_ALLOWED);
             }
 
             boolean sameRequest = existingDelivery.matchesCreation(
@@ -226,8 +202,7 @@ public class DeliveryServiceImpl implements DeliveryService{
             );
 
             if (!sameRequest) {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT, "같은 주문에 다른 내용의 배송이 이미 존재합니다.");
+                throw new DeliveryException(DeliveryErrorCode.DELIVERY_CREATION_CONFLICT);
             }
 
             return new DeliveryCreateResult(
@@ -263,26 +238,7 @@ public class DeliveryServiceImpl implements DeliveryService{
 
         // 출발 허브와 도착 허브가 다르면 허브 -> 허브 구간을 먼저 생성
         if(!departureHubId.equals(destinationHubId)){
-            HubRouteResponse hubRoute = hubClient.getRoute(departureHubId, destinationHubId);
-
-            // 허브 서비스에서 가져온 정보 검증
-            if(hubRoute == null || hubRoute.distance() == null || hubRoute.duration() == null){
-                throw new IllegalStateException("허브 간 예상 거리와 예상 소요 시간이 필요합니다.");
-            }
-
-            if (!departureHubId.equals(hubRoute.originHubId())
-                    || !destinationHubId.equals(hubRoute.destinationHubId())) {
-                throw new IllegalStateException(
-                        "조회된 허브 경로가 요청한 출발, 목적지와 다릅니다."
-                );
-            }
-
-            if (hubRoute.distance().signum() < 0
-                    || hubRoute.duration() < 0) {
-                throw new IllegalStateException(
-                        "허브 간 거리와 소요시간은 음수일 수 없습니다."
-                );
-            }
+            HubRouteResponse hubRoute = hubClientAdapter.getRoute(departureHubId, destinationHubId);
 
             DeliveryRoute hubToHub = DeliveryRoute.builder()
                     .delivery(delivery)
@@ -324,10 +280,10 @@ public class DeliveryServiceImpl implements DeliveryService{
     public DeliveryCancelResponse cancelDelivery(UUID deliveryId) {
 
         Delivery delivery = deliveryRepository.findById(deliveryId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 배송을 찾을 수 없습니다."));
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
 
         if(delivery.getDeletedAt() != null){
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 배송을 찾을 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND);
         }
 
         // 이미 취소된 배송에 대해 반복 취소 요청이 오는 경우 기존 결과를 응답
@@ -337,16 +293,10 @@ public class DeliveryServiceImpl implements DeliveryService{
 
         List<DeliveryRoute> routes = deliveryRouteRepository.findAllByDeliveryIdOrderBySequenceAsc(deliveryId);
 
-        try{
-            delivery.cancel();
+        delivery.cancel();
 
-            for(DeliveryRoute route : routes){
-                route.cancel();
-            }
-        }
-        // 배송, 배송 경로 상태가 WAITING인 경우/배송이 이미 취소된 경우를 제외한 취소 불가 상태
-        catch (IllegalStateException e){
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        for(DeliveryRoute route : routes){
+            route.cancel();
         }
 
         return DeliveryCancelResponse.from(delivery);
@@ -362,19 +312,15 @@ public class DeliveryServiceImpl implements DeliveryService{
     public void deleteDelivery(UUID deliveryId) {
 
         Delivery delivery = deliveryRepository.findById(deliveryId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 배송을 찾을 수 없습니다."));
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
 
         if(delivery.getDeletedAt() != null) return;
 
         // 배송 상태가 삭제 가능한지 검증
-        try{
-            delivery.validateDeletable();
-        } catch (IllegalStateException e){
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
-        }
+        delivery.validateDeletable();
 
         UUID userId = auditorAware.getCurrentAuditor()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "삭제 요청자 정보를 확인할 수 없습니다."));
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.REQUESTER_REQUIRED));
 
         List<DeliveryRoute> routes = deliveryRouteRepository.findAllByDeliveryIdOrderBySequenceAsc(deliveryId);
 
@@ -402,27 +348,23 @@ public class DeliveryServiceImpl implements DeliveryService{
             UUID deliveryId, UUID routeId, DeliveryAssignRequest request, UUID requesterId, String role) {
 
         if(!"MASTER".equals(role)){
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "배송 담당자 배정은 MASTER만 가능합니다.");
+            throw new DeliveryException(DeliveryErrorCode.MANAGER_ASSIGNMENT_FORBIDDEN);
         }
 
         if(requesterId == null){
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "요청자 정보를 확인할 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.REQUESTER_REQUIRED);
         }
 
         Delivery delivery = deliveryRepository.findByIdAndDeletedAtIsNull(deliveryId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송을 찾을 수 없습니다."));
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
 
         DeliveryRoute route = deliveryRouteRepository.findByIdAndDeliveryIdAndDeletedAtIsNull(routeId, deliveryId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송 경로를 찾을 수 없습니다."));
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_ROUTE_NOT_FOUND));
 
-        try {
-            delivery.validateManagerAssignable();
-        } catch (IllegalStateException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
-        }
+        delivery.validateManagerAssignable();
 
         if (route.getStatus() != DeliveryRouteStatus.WAITING) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "대기 중인 배송 경로에만 담당자를 배정할 수 있습니다.");
+            throw new DeliveryException(DeliveryErrorCode.DELIVERY_ROUTE_ASSIGNMENT_NOT_ALLOWED);
         }
 
         boolean sameRouteManager = request.managerId().equals(route.getManagerId());
@@ -441,14 +383,10 @@ public class DeliveryServiceImpl implements DeliveryService{
                 role
         );
 
-        try {
-            route.assignManager(request.managerId());
+        route.assignManager(request.managerId());
 
-            if (route.getType() == RouteType.HUB_TO_COMPANY) {
-                delivery.assignManager(request.managerId());
-            }
-        } catch (IllegalStateException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        if (route.getType() == RouteType.HUB_TO_COMPANY) {
+            delivery.assignManager(request.managerId());
         }
 
         return DeliveryAssignResponse.from(route);
@@ -456,53 +394,26 @@ public class DeliveryServiceImpl implements DeliveryService{
 
     /**
      * 사용자 API를 호출해 배송 담당자 자격과 허브 소속을 검증하는 private 메서드
-     * @param managerId 베정할 배송 담당자의 사용자ID
+     * @param managerId 배정할 배송 담당자의 사용자ID
      * @param departureHubId 배정할 배송 경로의 출발 허브ID
      * @param requesterId 배정을 요청한 MASTER의 사용자ID
      * @param role 배정 요청자 권한
      */
     private void validateDeliveryManager(UUID managerId, UUID departureHubId, UUID requesterId, String role) {
-        UserDetailResponse user;
-
-        try {
-            user = userClient.getUserDetail(managerId, requesterId, role);
-        } catch (FeignException e) {
-            if (e.status() == 404) {
-                throw new ResponseStatusException(
-                        HttpStatus.valueOf(422), "배정할 사용자를 찾을 수 없습니다.");
-            }
-
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE, "사용자 정보를 확인할 수 없습니다.", e);
-        }
-
-        if (user == null
-                || !managerId.equals(user.userId())
-                || user.isDeliveryManager() == null
-                || user.affiliationType() == null
-                || user.affiliationStatus() == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE, "사용자 서비스의 응답을 확인할 수 없습니다.");
-        }
+        UserDetailResponse user = userClientAdapter.getAssignmentCandidate(managerId, requesterId, role);
 
         if (!Boolean.TRUE.equals(user.isDeliveryManager())
                 || !"HUB".equals(user.affiliationType())
                 || !"CONFIRMED".equals(user.affiliationStatus())) {
-            throw new ResponseStatusException(
-                    HttpStatus.valueOf(422), "소속이 확정된 허브 배송 담당자만 배정할 수 있습니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.ASSIGNEE_NOT_ELIGIBLE);
         }
 
         if (user.hubId() == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE, "사용자의 소속 허브 정보를 확인할 수 없습니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.INVALID_USER_SERVICE_RESPONSE);
         }
 
         if (!departureHubId.equals(user.hubId())) {
-            throw new ResponseStatusException(
-                    HttpStatus.valueOf(422), "배송 경로의 출발 허브에 소속된 담당자만 배정할 수 있습니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.ASSIGNEE_HUB_MISMATCH);
         }
     }
 
@@ -522,43 +433,36 @@ public class DeliveryServiceImpl implements DeliveryService{
     public DeliveryStatusUpdateResponse updateDeliveryStatus(
             UUID deliveryId, UUID routeId, DeliveryStatusUpdateRequest request, UUID requesterId, String role) {
         if (!"MASTER".equals(role) && !"USER".equals(role)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "허용되지 않은 권한입니다.");
+            throw new DeliveryException(DeliveryErrorCode.ACCESS_DENIED);
         }
 
         if (requesterId == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "요청자 정보를 확인할 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.REQUESTER_REQUIRED);
         }
 
         Delivery delivery = deliveryRepository.findByIdAndDeletedAtIsNull(deliveryId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송을 찾을 수 없습니다."));
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
 
         DeliveryRoute route = deliveryRouteRepository.findByIdAndDeliveryIdAndDeletedAtIsNull(routeId, deliveryId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송 경로를 찾을 수 없습니다."));
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_ROUTE_NOT_FOUND));
 
         if (!"MASTER".equals(role) && !requesterId.equals(route.getManagerId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 배송 경로의 담당자만 상태를 변경할 수 있습니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.ROUTE_STATUS_UPDATE_FORBIDDEN);
         }
 
         if (delivery.getStatus() == DeliveryStatus.CANCELLED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "취소된 배송은 상태를 변경할 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.CANCELLED_DELIVERY_STATUS_CHANGE);
         }
 
-        try {
-            if (route.getStatus() == DeliveryRouteStatus.WAITING
-                    && request.status() == DeliveryRouteStatus.IN_TRANSIT) {
-                validatePreviousRoutesArrived(delivery, route);
-            }
+        if (route.getStatus() == DeliveryRouteStatus.WAITING
+                && request.status() == DeliveryRouteStatus.IN_TRANSIT) {
+            validatePreviousRoutesArrived(delivery, route);
+        }
 
-            boolean changed = route.updateStatus(request.status());
+        boolean changed = route.updateStatus(request.status());
 
-            if (changed) {
-                delivery.updateStatusByRoute(route.getType(), route.getStatus());
-            }
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
-        } catch (IllegalStateException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        if (changed) {
+            delivery.updateStatusByRoute(route.getType(), route.getStatus());
         }
 
         return DeliveryStatusUpdateResponse.from(delivery, route);
@@ -571,7 +475,7 @@ public class DeliveryServiceImpl implements DeliveryService{
      * @param route 출발하려는 배송 경로
      */
     private void validatePreviousRoutesArrived(Delivery delivery, DeliveryRoute route){
-        // 첫 번째 경로는 이전 경로 상태 검사 생략
+        // 배송 경로의 1구간은 이전 배송 경로 상태 검사 생략
         if (route.getSequence() == 1) return;
 
         List<DeliveryRoute> previousRoutes = deliveryRouteRepository
@@ -581,14 +485,14 @@ public class DeliveryServiceImpl implements DeliveryService{
                 .toList();
 
         if(previousRoutes.isEmpty()){
-            throw new IllegalStateException("이전 배송 경로를 확인할 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.PREVIOUS_ROUTES_NOT_FOUND);
         }
 
         boolean allArrived = previousRoutes.stream()
                 .allMatch(previous -> previous.getStatus() == DeliveryRouteStatus.ARRIVED);
 
         if(!allArrived){
-            throw new IllegalStateException("이전 배송 경로가 모두 도착해야 출발할 수 있습니다.");
+            throw new DeliveryException(DeliveryErrorCode.PREVIOUS_ROUTES_NOT_ARRIVED);
         }
     }
 }
