@@ -17,6 +17,7 @@ public enum ErrorCode {
     LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다."),
     DUPLICATE_SLACK_ID(HttpStatus.CONFLICT, "이미 존재하는 슬랙ID입니다."),
     FORBIDDEN_NOT_OWNER(HttpStatus.FORBIDDEN, "본인의 정보만 접근할 수 있습니다."),
+    CANNOT_DELETE_SELF(HttpStatus.BAD_REQUEST, "본인 계정은 삭제할 수 없습니다."),
 
     // 업체 소속 확정 후 상태 변경 시
     INVALID_AFFILIATION_STATUS(HttpStatus.CONFLICT, "업체 소속 대기 상태인 사용자만 소속을 확정할 수 있습니다."),

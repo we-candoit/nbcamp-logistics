@@ -89,6 +89,28 @@ public class UserService {
         return new UserDetailResponse(user);
     }
 
+    // 유저 삭제 - 관리자 전용
+    @Transactional
+    public void deleteUser(UUID requesterId, UUID targetId, UserRole role) {
+
+        if (role != UserRole.MASTER) {
+            throw new CustomException(ErrorCode.FORBIDDEN);
+        }
+        // MASTER는 자기 계정 삭제 불가
+        if (requesterId.equals(targetId)) {
+            throw new CustomException(ErrorCode.CANNOT_DELETE_SELF);
+        }
+
+        if (!userRepository.existsById(requesterId)) {
+            throw new CustomException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        User user = userRepository.findById(targetId).orElseThrow(
+                () -> new CustomException(ErrorCode.USER_NOT_FOUND)
+        );
+        user.softDelete(requesterId.toString());
+    }
+
     private CompanyResponse findCompany(UUID requesterId, UserRole requesterRole, String companyName) {
         List<CompanyResponse> companies;
         try {
