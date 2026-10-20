@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: user-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_SERVER_NAME}:${DB_SERVER_PORT}/${POSTGRES_DB}?currentSchema=${DB_SCHEMA}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        show_sql: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${DISCOVERY_SERVER_NAME}:${DISCOVERY_SERVER_PORT}/eureka/
+
+
+jwt:
+  secret-key: ${JWT_SECRET_KEY}
+  expiration: ${JWT_EXPIRATION}
+
+#  마스터 계정 초기 값
+master:
+  login-id: ${MASTER_LOGIN_ID}
+  password: ${MASTER_PASSWORD}
+  name: ${MASTER_NAME}
+  slack-id: ${MASTER_SLACK_ID}
