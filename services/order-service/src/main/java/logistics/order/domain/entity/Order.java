@@ -22,7 +22,7 @@ public class Order extends BaseEntity {
     @Column(nullable = false, updatable = false)
     private UUID orderUserId;
 
-    @Column(nullable = false, updatable = false)
+    @Column
     private UUID deliveryId;
 
     @Column(nullable = false, updatable = false)
