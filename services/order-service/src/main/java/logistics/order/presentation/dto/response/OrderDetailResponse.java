@@ -43,7 +43,7 @@ public class OrderDetailResponse {
                 order.getDeliveryId(),
                 order.getOrderUserId(),
                 order.getRequesterId(),
-                order.getOrderStatus(),
+                order.getStatus(),
                 order.getAddress(),
                 order.getRequestNote(),
 

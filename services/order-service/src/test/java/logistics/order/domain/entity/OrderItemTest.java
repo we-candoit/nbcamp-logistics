@@ -27,7 +27,7 @@ class OrderItemTest {
     //주문 상태를 지정한 주문상품 생성
     private OrderItem orderItemOf(OrderStatus status) {
         Order order = new Order(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
-        ReflectionTestUtils.setField(order, "orderStatus", status);
+        ReflectionTestUtils.setField(order, "status", status);
         return new OrderItem(UUID.randomUUID(), "생수 2L", 15_000L, 3L, UUID.randomUUID(), UUID.randomUUID(), order);
     }
 

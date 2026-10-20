@@ -17,6 +17,6 @@ public class CancelOrderResponse {
     private OrderStatus status;
 
     public static CancelOrderResponse from(Order order) {
-        return new CancelOrderResponse(order.getId(), order.getDeliveryId(), order.getOrderStatus());
+        return new CancelOrderResponse(order.getId(), order.getDeliveryId(), order.getStatus());
     }
 }
