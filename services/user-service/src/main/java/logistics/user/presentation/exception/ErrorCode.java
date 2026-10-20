@@ -18,6 +18,13 @@ public enum ErrorCode {
     DUPLICATE_SLACK_ID(HttpStatus.CONFLICT, "이미 존재하는 슬랙ID입니다."),
     FORBIDDEN_NOT_OWNER(HttpStatus.FORBIDDEN, "본인의 정보만 접근할 수 있습니다."),
 
+    // 업체 소속 확정 후 상태 변경 시
+    INVALID_AFFILIATION_STATUS(HttpStatus.CONFLICT, "업체 소속 대기 상태인 사용자만 소속을 확정할 수 있습니다."),
+    // 업체명으로 검색 실패 시
+    COMPANY_NOT_FOUND(HttpStatus.BAD_REQUEST, "존재하지 않는 업체입니다."),
+    // 업체 서버 꺼져있을 경우
+    COMPANY_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "업체 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요."),
+
     // 허브명으로 검색 실패 시
     HUB_NOT_FOUND(HttpStatus.BAD_REQUEST, "존재하지 않는 허브입니다."),
     // 허브 서버 꺼져있을 경우

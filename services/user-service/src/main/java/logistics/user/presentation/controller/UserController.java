@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import logistics.user.application.service.UserService;
 import logistics.user.common.constant.UserHeaders;
 import logistics.user.domain.enums.UserRole;
+import logistics.user.presentation.dto.request.CompanyApplyRequest;
 import logistics.user.presentation.dto.request.UserUpdateRequest;
 import logistics.user.presentation.dto.response.ApiResponse;
 import logistics.user.presentation.dto.response.UserDetailResponse;
@@ -46,11 +47,22 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserDetailResponse>> updateUser(
             @PathVariable("id") UUID id, @Valid @RequestBody UserUpdateRequest request,
             @RequestHeader(UserHeaders.USER_ID) UUID requestorId
-            ) {
+    ) {
         UserDetailResponse myProfile = userService.updateUser(requestorId, id, request.getName(), request.getEmail());
         ApiResponse<UserDetailResponse> apiResponse = ApiResponse.ok("사용자 정보가 수정되었습니다.", myProfile);
 
         return ResponseEntity.ok(apiResponse);
     }
 
+    // 회원가입 후 업체 소속 신청
+    @PatchMapping("/me/affiliation")
+    public ResponseEntity<ApiResponse<UserDetailResponse>> applyCompany(
+            @Valid @RequestBody CompanyApplyRequest request,
+            @RequestHeader(UserHeaders.USER_ID) UUID requesterId,
+            @RequestHeader(UserHeaders.ROLE_NAME) UserRole requesterRole
+    ) {
+        UserDetailResponse myProfile = userService.applyCompany(requesterId, requesterRole, request.getCompanyName());
+        ApiResponse<UserDetailResponse> apiResponse = ApiResponse.ok("업체 소속이 확정되었습니다.", myProfile);
+        return ResponseEntity.ok(apiResponse);
+    }
 }
