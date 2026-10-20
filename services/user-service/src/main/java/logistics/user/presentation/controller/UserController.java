@@ -1,8 +1,10 @@
 package logistics.user.presentation.controller;
 
+import jakarta.validation.Valid;
 import logistics.user.application.service.UserService;
 import logistics.user.common.constant.UserHeaders;
 import logistics.user.domain.enums.UserRole;
+import logistics.user.presentation.dto.request.UserUpdateRequest;
 import logistics.user.presentation.dto.response.ApiResponse;
 import logistics.user.presentation.dto.response.UserDetailResponse;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +28,7 @@ public class UserController {
             @RequestHeader(UserHeaders.USER_ID) UUID requesterId,
             @RequestHeader(UserHeaders.ROLE_NAME) UserRole requesterRole
     ) {
-        UserDetailResponse myProfile = userService.getMyProfile(id, requesterId, requesterRole);
+        UserDetailResponse myProfile = userService.getMyProfile(requesterId, id, requesterRole);
         ApiResponse<UserDetailResponse> apiResponse = ApiResponse.ok(myProfile);
         return ResponseEntity.ok(apiResponse);
     }
@@ -36,6 +38,18 @@ public class UserController {
     public ResponseEntity<ApiResponse<List<UserDetailResponse>>> getMyProfile(@RequestHeader(UserHeaders.ROLE_NAME) UserRole role) {
         List<UserDetailResponse> myProfile = userService.findAll(role);
         ApiResponse<List<UserDetailResponse>> apiResponse = ApiResponse.ok(myProfile);
+        return ResponseEntity.ok(apiResponse);
+    }
+
+    // 유저 정보 수정
+    @PatchMapping("/{id}")
+    public ResponseEntity<ApiResponse<UserDetailResponse>> updateUser(
+            @PathVariable("id") UUID id, @Valid @RequestBody UserUpdateRequest request,
+            @RequestHeader(UserHeaders.USER_ID) UUID requestorId
+            ) {
+        UserDetailResponse myProfile = userService.updateUser(requestorId, id, request.getName(), request.getEmail());
+        ApiResponse<UserDetailResponse> apiResponse = ApiResponse.ok("사용자 정보가 수정되었습니다.", myProfile);
+
         return ResponseEntity.ok(apiResponse);
     }
 
