@@ -10,9 +10,9 @@ import java.util.UUID;
 @FeignClient(name = "hub-service")
 public interface HubClient {
 
-    @GetMapping("/api/hubs/routes")
+    @GetMapping("/internal/hubs/routes/hubs")
     HubRouteResponse getRoute(
-            @RequestParam("departureHubId") UUID departureHubId,
+            @RequestParam("originHubId") UUID departureHubId,
             @RequestParam("destinationHubId") UUID destinationHubId
     );
 }
