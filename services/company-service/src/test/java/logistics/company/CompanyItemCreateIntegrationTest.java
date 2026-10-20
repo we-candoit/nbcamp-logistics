@@ -49,7 +49,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class CompanyItemCreateIntegrationTest {
 
     private static final String MASTER = "MASTER";
-    private static final String AUDITOR = "creator-id";
+    private static final UUID AUDITOR = UUID.randomUUID() ;
     private static final String ITEM_NAME = "마른오징어";
     private static final Long PRICE = 15000L;
 
@@ -67,7 +67,7 @@ class CompanyItemCreateIntegrationTest {
     @MockitoBean
     private UserClient userClient;
     @MockitoBean
-    private AuditorAware<String> auditorAware;
+    private AuditorAware<UUID> auditorAware;
 
     private UUID masterId;
     private Company company;

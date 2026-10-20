@@ -25,9 +25,6 @@ public enum ErrorCode {
     COMPANY_UPDATE_FORBIDDEN(403, "업체 수정 권한이 없습니다."),
     NO_UPDATE_FIELDS(400, "변경할 내용이 없습니다."),
 
-    COMPANY_HAS_ACTIVE_ORDERS(409, "진행 중인 주문이 있어 업체를 삭제할 수 없습니다."),
-    COMPANY_HAS_REMAINING_STOCK(409, "재고가 남아 있어 업체를 삭제할 수 없습니다."),
-
     // 사용자 확인
     MANAGER_NOT_COMPANY_USER(400, "업체 소속 사용자가 아닙니다."),
     MANAGER_ALREADY_CONFIRMED(409, "이미 소속이 확정된 사용자입니다."),
@@ -35,11 +32,7 @@ public enum ErrorCode {
     // 상품
     ITEM_NAME_ALREADY_EXISTS(409, "같은 업체에 이미 존재하는 상품명입니다."),
     ITEM_FORBIDDEN(403, "상품 관리 권한이 없습니다."),
-    ITEM_NOT_FOUND(404, "상품을 찾을 수 없습니다."),
-    ITEM_HAS_ACTIVE_ORDERS(409, "진행 중인 주문이 있어 상품을 삭제할 수 없습니다."),
-    ITEM_HAS_REMAINING_STOCK(409, "재고가 남아 있어 상품을 삭제할 수 없습니다.");
-
-    // 에러 추가 예정
+    ITEM_NOT_FOUND(404, "상품을 찾을 수 없습니다.");
 
     private final int statusCode;
     private final String message;

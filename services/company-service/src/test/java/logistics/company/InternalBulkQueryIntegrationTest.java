@@ -47,6 +47,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 )
 class InternalBulkQueryIntegrationTest {
 
+    private static final UUID AUDITOR = UUID.randomUUID() ;
+
     @Autowired
     private CompanyService companyService;
     @Autowired
@@ -63,7 +65,7 @@ class InternalBulkQueryIntegrationTest {
     @MockitoBean
     private UserClient userClient;
     @MockitoBean
-    private AuditorAware<String> auditorAware;
+    private AuditorAware<UUID> auditorAware;
 
     private Company active;
     private Company deletedCompany;
@@ -72,18 +74,18 @@ class InternalBulkQueryIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        given(auditorAware.getCurrentAuditor()).willReturn(Optional.of("tester"));
+        given(auditorAware.getCurrentAuditor()).willReturn(Optional.of(AUDITOR));
 
         active = companyRepository.saveAndFlush(
                 Company.create(UUID.randomUUID(), UUID.randomUUID(), "스파르타수산", "서울 강남구 테헤란로 311"));
         deletedCompany = companyRepository.saveAndFlush(
                 Company.create(UUID.randomUUID(), UUID.randomUUID(), "삭제된업체", "독도"));
-        deletedCompany.delete("tester");
+        deletedCompany.delete(AUDITOR);
         companyRepository.saveAndFlush(deletedCompany);
 
         activeItem = companyItemRepository.saveAndFlush(CompanyItem.create(active, "마른오징어", 15000L, null));
         deletedItem = companyItemRepository.saveAndFlush(CompanyItem.create(active, "삭제된상품", 1000L, null));
-        deletedItem.delete("tester");
+        deletedItem.delete(AUDITOR);
         companyItemRepository.saveAndFlush(deletedItem);
     }
 
