@@ -9,32 +9,32 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @MappedSuperclass
-// access = AccessLevel.PROTECTED : 외부 코드에서 의미 없는 빈 Entity를 만드는 것을 제한
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public abstract class BaseEntity {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "created_by", nullable = false, updatable = false, length = 100)
-    private String createdBy;
+    @Column(name = "created_by", nullable = false, updatable = false)
+    private UUID createdBy;
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    @Column(name = "updated_by", nullable = false, length = 100)
-    private String updatedBy;
+    @Column(name = "updated_by", nullable = false)
+    private UUID updatedBy;
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    @Column(name = "deleted_by", length = 100)
-    private String deletedBy;
+    @Column(name = "deleted_by")
+    private UUID deletedBy;
 
-    protected BaseEntity(String createdBy) {
+    protected BaseEntity(UUID createdBy) {
         this.createdBy = createdBy;
         this.updatedBy = createdBy;
     }
@@ -52,7 +52,7 @@ public abstract class BaseEntity {
         this.updatedAt = LocalDateTime.now();
     }
 
-    protected void changeUpdatedBy(String updatedBy) {
+    protected void changeUpdatedBy(UUID updatedBy) {
         this.updatedBy = updatedBy;
     }
 }
