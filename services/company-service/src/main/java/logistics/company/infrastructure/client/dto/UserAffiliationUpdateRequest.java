@@ -10,7 +10,7 @@ import java.util.UUID;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class UserAffiliationUpdateRequest {
     private UUID companyId;
-    private String affiliationName;
+    private String companyName;
 
     public static UserAffiliationUpdateRequest confirm(UUID companyId, String companyName) {
         return new UserAffiliationUpdateRequest(companyId, companyName);
