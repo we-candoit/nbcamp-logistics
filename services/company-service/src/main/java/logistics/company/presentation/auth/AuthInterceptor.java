@@ -7,6 +7,8 @@ import logistics.company.presentation.exception.ErrorCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.util.UUID;
+
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
 
@@ -19,17 +21,28 @@ public class AuthInterceptor implements HandlerInterceptor {
     // Controller 진입 전 헤더 확인 후 request attribute에 저장
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        checkHeader(request, LOGIN_ID_HEADER);
+        String userId = checkHeader(request, LOGIN_ID_HEADER);
         checkHeader(request, ROLE_HEADER);
+        validateUuid(userId);
         return true;
     }
 
-    // 헤더가 없거나 공백이면 401, 있으면 같은 이름으로 저장
-    private void checkHeader(HttpServletRequest request, String header) {
+    // 헤더가 없거나 공백이면 401, 있으면 같은 이름으로 request attribute에 저장
+    private String checkHeader(HttpServletRequest request, String header) {
         String value = request.getHeader(header);
         if (value == null || value.isBlank()) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
         request.setAttribute(header, value);
+        return value;
+    }
+
+    // 사용자 ID가 UUID 형식이 아니면 401
+    private void validateUuid(String value) {
+        try {
+            UUID.fromString(value);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
     }
 }

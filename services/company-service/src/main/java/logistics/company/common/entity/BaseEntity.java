@@ -11,6 +11,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @MappedSuperclass                                    // 테이블은 안 만들고 필드만 자식에게 상속
@@ -23,8 +24,7 @@ public abstract class BaseEntity  {
 
     @CreatedBy
     @Column(length = 100, updatable = false, nullable = false)
-    private String createdBy;    // 레코드 생성자
-
+    private UUID createdBy;    // 레코드 생성자
 
     @LastModifiedDate
     @Column(nullable = false)
@@ -32,15 +32,15 @@ public abstract class BaseEntity  {
 
     @LastModifiedBy
     @Column(length = 100, nullable = false)
-    private String updatedBy;    // 레코드 수정자
+    private UUID updatedBy;    // 레코드 수정자
 
     @Column
     private LocalDateTime deletedAt;    // 레코드 삭제 시간
 
     @Column(length = 100)
-    private String deletedBy;           // 레코드 삭제자
+    private UUID deletedBy;           // 레코드 삭제자
 
-    public void delete(String deletedBy) {      // 논리 삭제
+    public void delete(UUID deletedBy) {      // 논리 삭제
         this.deletedAt = LocalDateTime.now();
         this.deletedBy = deletedBy;
     }
