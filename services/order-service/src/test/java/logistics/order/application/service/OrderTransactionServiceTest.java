@@ -118,7 +118,7 @@ class OrderTransactionServiceTest {
             Order savedOrder = orderRepository.findById(order.getId()).orElseThrow();
             OrderItem savedItem = orderItemRepository.findById(orderItem.getId()).orElseThrow();
 
-            assertThat(savedOrder.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            assertThat(savedOrder.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
             assertThat(savedOrder.getDeliveryId()).isEqualTo(order.getDeliveryId());
             assertThat(savedItem.getOrder().getId()).isEqualTo(order.getId());
             assertThat(savedItem.getQuantity()).isEqualTo(3L);
@@ -170,7 +170,7 @@ class OrderTransactionServiceTest {
             em.flush();
 
             //then
-            Object orderStatus = em.createNativeQuery("select order_status from p_order where id = :id")
+            Object orderStatus = em.createNativeQuery("select status from p_orders where id = :id")
                     .setParameter("id", order.getId())
                     .getSingleResult();
 
@@ -294,8 +294,8 @@ class OrderTransactionServiceTest {
             em.clear();
 
             //then
-            assertThat(canceled.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
-            assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus())
+            assertThat(canceled.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+            assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                     .isEqualTo(OrderStatus.CANCELLED);
         }
 
@@ -360,7 +360,7 @@ class OrderTransactionServiceTest {
             em.clear();
 
             //then
-            assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus())
+            assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                     .isEqualTo(OrderStatus.CANCELLED);
         }
 
@@ -380,7 +380,7 @@ class OrderTransactionServiceTest {
                             .isEqualTo(ErrorCode.C403_FORBIDDEN_ORDER));
             em.flush();
             em.clear();
-            assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus())
+            assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                     .isEqualTo(OrderStatus.CONFIRMED);
         }
 
@@ -424,7 +424,7 @@ class OrderTransactionServiceTest {
             em.clear();
 
             //then
-            assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus())
+            assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                     .isEqualTo(OrderStatus.CONFIRMED);
         }
 
@@ -635,7 +635,7 @@ class OrderTransactionServiceTest {
             Order order = new Order(orderUserId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
             order.confirm(UUID.randomUUID());
             if (!confirmed) {
-                ReflectionTestUtils.setField(order, "orderStatus", OrderStatus.WAITING);
+                ReflectionTestUtils.setField(order, "status", OrderStatus.WAITING);
             }
             orderTransactionService.save(order, orderItem(order));
             return order;
@@ -667,7 +667,7 @@ class OrderTransactionServiceTest {
 
             //createdAt은 updatable = false라 엔티티로는 변경 불가 → native query로 변경
             private void setCreatedAt(Order order, LocalDateTime createdAt) {
-                em.createNativeQuery("update p_order set created_at = :createdAt where id = :id")
+                em.createNativeQuery("update p_orders set created_at = :createdAt where id = :id")
                         .setParameter("createdAt", createdAt)
                         .setParameter("id", order.getId())
                         .executeUpdate();

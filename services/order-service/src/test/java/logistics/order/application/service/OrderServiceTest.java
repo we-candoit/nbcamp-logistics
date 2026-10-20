@@ -268,7 +268,7 @@ class OrderServiceTest {
 
             //주문
             assertThat(order.getId()).isEqualTo(response.getOrderId());
-            assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
             assertThat(order.getDeliveryId()).isEqualTo(deliveryId);
             assertThat(order.getOrderUserId()).isEqualTo(userId);
             assertThat(order.getRequesterId()).isEqualTo(requesterId);
@@ -295,7 +295,7 @@ class OrderServiceTest {
             List<OrderStatus> savedStatuses = new ArrayList<>();
             willAnswer(invocation -> {
                 Order order = invocation.getArgument(0);
-                savedStatuses.add(order.getOrderStatus());
+                savedStatuses.add(order.getStatus());
                 return null;
             }).given(orderTransactionService).save(any(), any());
 

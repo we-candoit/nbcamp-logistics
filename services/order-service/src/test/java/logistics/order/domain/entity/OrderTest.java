@@ -57,7 +57,7 @@ class OrderTest {
                 Order order = createOrder();
 
                 //then
-                assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.WAITING);
+                assertThat(order.getStatus()).isEqualTo(OrderStatus.WAITING);
                 assertThat(order.getDeliveryId()).isNull();
             }
 
@@ -101,7 +101,7 @@ class OrderTest {
 
                 //then
                 assertThat(order.getRequestNote()).isNull();
-                assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.WAITING);
+                assertThat(order.getStatus()).isEqualTo(OrderStatus.WAITING);
             }
         }
     }
@@ -125,7 +125,7 @@ class OrderTest {
 
                 //then
                 assertThat(order.getDeliveryId()).isEqualTo(deliveryId);
-                assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+                assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
             }
 
             @Test
@@ -157,7 +157,7 @@ class OrderTest {
                 assertThatThrownBy(() -> order.confirm(null))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C500_INTERNAL_SERVER_ERROR));
                 assertThat(order.getDeliveryId()).isNull();
-                assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.WAITING);
+                assertThat(order.getStatus()).isEqualTo(OrderStatus.WAITING);
             }
 
             @ParameterizedTest
@@ -166,13 +166,13 @@ class OrderTest {
                 //given
                 Order order = createOrder();
                 //상태 변경 메서드(cancel 등)가 아직 없어 테스트에서만 필드를 직접 세팅
-                ReflectionTestUtils.setField(order, "orderStatus", status);
+                ReflectionTestUtils.setField(order, "status", status);
 
                 //when, then
                 assertThatThrownBy(() -> order.confirm(UUID.randomUUID()))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C409_INVALID_ORDER_STATUS));
                 assertThat(order.getDeliveryId()).isNull();
-                assertThat(order.getOrderStatus()).isEqualTo(status);
+                assertThat(order.getStatus()).isEqualTo(status);
             }
 
             @Test
@@ -186,7 +186,7 @@ class OrderTest {
                 assertThatThrownBy(() -> order.confirm(UUID.randomUUID()))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C409_INVALID_ORDER_STATUS));
                 assertThat(order.getDeliveryId()).isEqualTo(first);
-                assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+                assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
             }
         }
     }
@@ -210,7 +210,7 @@ class OrderTest {
                 order.cancel();
 
                 //then
-                assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+                assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
                 assertThat(order.getDeliveryId()).isEqualTo(deliveryId);
             }
         }
@@ -224,12 +224,12 @@ class OrderTest {
             public void CONFIRMED가_아닌_주문을_취소하면_C409_예외가_발생하고_상태는_그대로다(OrderStatus status) {
                 //given
                 Order order = createOrder();
-                ReflectionTestUtils.setField(order, "orderStatus", status);
+                ReflectionTestUtils.setField(order, "status", status);
 
                 //when, then
                 assertThatThrownBy(order::cancel)
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C409_INVALID_ORDER_STATUS));
-                assertThat(order.getOrderStatus()).isEqualTo(status);
+                assertThat(order.getStatus()).isEqualTo(status);
             }
 
             @Test
@@ -261,7 +261,7 @@ class OrderTest {
             order.revertCancel();
 
             //then
-            assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
         }
 
         @ParameterizedTest
@@ -269,13 +269,13 @@ class OrderTest {
         public void 취소되지_않은_주문은_예외_없이_상태가_그대로다(OrderStatus status) {
             //given
             Order order = createOrder();
-            ReflectionTestUtils.setField(order, "orderStatus", status);
+            ReflectionTestUtils.setField(order, "status", status);
 
             //when
             order.revertCancel();
 
             //then
-            assertThat(order.getOrderStatus()).isEqualTo(status);
+            assertThat(order.getStatus()).isEqualTo(status);
         }
     }
 
@@ -298,7 +298,7 @@ class OrderTest {
         public void CONFIRMED가_아닌_주문은_취소_불가하다(OrderStatus status) {
             //given
             Order order = createOrder();
-            ReflectionTestUtils.setField(order, "orderStatus", status);
+            ReflectionTestUtils.setField(order, "status", status);
 
             //when, then
             assertThat(order.isCancelable()).isFalse();
@@ -313,7 +313,7 @@ class OrderTest {
         public void 취소된_주문은_삭제_가능하다() {
             //given
             Order order = createOrder();
-            ReflectionTestUtils.setField(order, "orderStatus", OrderStatus.CANCELLED);
+            ReflectionTestUtils.setField(order, "status", OrderStatus.CANCELLED);
 
             //when, then
             assertThat(order.isDeletable()).isTrue();
@@ -324,7 +324,7 @@ class OrderTest {
         public void CANCELLED가_아닌_주문은_삭제_불가하다(OrderStatus status) {
             //given
             Order order = createOrder();
-            ReflectionTestUtils.setField(order, "orderStatus", status);
+            ReflectionTestUtils.setField(order, "status", status);
 
             //when, then
             assertThat(order.isDeletable()).isFalse();
@@ -359,7 +359,7 @@ class OrderTest {
                 assertThat(order.isDeleted()).isTrue();
                 assertThat(order.getDeletedAt()).isNotNull();
                 assertThat(order.getDeletedBy()).isEqualTo(userId);
-                assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+                assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             }
         }
 
@@ -372,7 +372,7 @@ class OrderTest {
             public void CANCELLED가_아닌_주문을_삭제하면_C409_예외가_발생하고_삭제되지_않는다(OrderStatus status) {
                 //given
                 Order order = createOrder();
-                ReflectionTestUtils.setField(order, "orderStatus", status);
+                ReflectionTestUtils.setField(order, "status", status);
 
                 //when, then
                 assertThatThrownBy(() -> order.delete(UUID.randomUUID()))

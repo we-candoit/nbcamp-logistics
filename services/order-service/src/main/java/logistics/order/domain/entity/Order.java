@@ -37,7 +37,7 @@ public class Order extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(length = 30, nullable = false)
-    private OrderStatus orderStatus = OrderStatus.WAITING;
+    private OrderStatus status = OrderStatus.WAITING;
 
 
     @Builder
@@ -56,17 +56,17 @@ public class Order extends BaseEntity {
             throw new CustomException(ErrorCode.C500_INTERNAL_SERVER_ERROR);
         }
 
-        if (this.orderStatus != OrderStatus.WAITING) {
+        if (this.status != OrderStatus.WAITING) {
             throw new CustomException(ErrorCode.C409_INVALID_ORDER_STATUS);
         }
 
         this.deliveryId = deliveryId;
-        this.orderStatus = OrderStatus.CONFIRMED;
+        this.status = OrderStatus.CONFIRMED;
     }
 
     //주문취소 가능 여부
     public boolean isCancelable() {
-        return this.orderStatus == OrderStatus.CONFIRMED;
+        return this.status == OrderStatus.CONFIRMED;
     }
 
     //주문취소, CONFIRMED 상태에서만 가능
@@ -75,12 +75,12 @@ public class Order extends BaseEntity {
             throw new CustomException(ErrorCode.C409_INVALID_ORDER_STATUS);
         }
 
-        this.orderStatus = OrderStatus.CANCELLED;
+        this.status = OrderStatus.CANCELLED;
     }
 
     //주문삭제 가능 여부 / 취소된(CANCELLED) 주문만 가능 (배송 서비스도 취소된 배송만 삭제 허용)
     public boolean isDeletable() {
-        return this.orderStatus == OrderStatus.CANCELLED;
+        return this.status == OrderStatus.CANCELLED;
     }
 
     //주문삭제, CANCELLED 상태에서만 가능
@@ -95,22 +95,22 @@ public class Order extends BaseEntity {
     //주문취소 보상, CANCELLED 상태만 CONFIRMED로 복구
     //보상 중 예외가 발생하면 원래 실패 원인이 가려지므로 예외 없이 무시
     public void revertCancel() {
-        if (this.orderStatus == OrderStatus.CANCELLED) {
-            this.orderStatus = OrderStatus.CONFIRMED;
+        if (this.status == OrderStatus.CANCELLED) {
+            this.status = OrderStatus.CONFIRMED;
         }
     }
 
     //주문생성 실패, 보상이 모두 성공한 경우 WAITING 상태만 FAILED로 변경
     public void failed() {
-        if (OrderStatus.WAITING == this.orderStatus) {
-            this.orderStatus = OrderStatus.FAILED;
+        if (OrderStatus.WAITING == this.status) {
+            this.status = OrderStatus.FAILED;
         }
     }
 
     //주문생성 실패, 보상이 실패한 경우 WAITING 상태만 COMPENSATION_FAILED로 변경 / 수동 처리 대상
     public void compensationFailed() {
-        if (OrderStatus.WAITING == this.orderStatus) {
-            this.orderStatus = OrderStatus.COMPENSATION_FAILED;
+        if (OrderStatus.WAITING == this.status) {
+            this.status = OrderStatus.COMPENSATION_FAILED;
         }
     }
 }

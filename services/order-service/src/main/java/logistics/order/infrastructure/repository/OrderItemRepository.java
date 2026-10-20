@@ -31,7 +31,7 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
 
     //특정 상태의 주문
     @Query("select oi from OrderItem oi join fetch oi.order o " +
-            "where o.orderStatus = :status and o.deletedAt is null order by o.createdAt desc")
+            "where o.status = :status and o.deletedAt is null order by o.createdAt desc")
     List<OrderItem> findAllWithOrderByStatus(@Param("status") OrderStatus status);
 
     //특정 유저의 주문
@@ -41,7 +41,7 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
 
     //특정 유저의 특정 상태 주문
     @Query("select oi from OrderItem oi join fetch oi.order o " +
-            "where o.orderUserId = :orderUserId and o.orderStatus = :status and o.deletedAt is null " +
+            "where o.orderUserId = :orderUserId and o.status = :status and o.deletedAt is null " +
             "order by o.createdAt desc")
     List<OrderItem> findAllWithOrderByOrderUserIdAndStatus(@Param("orderUserId") UUID orderUserId,
                                                            @Param("status") OrderStatus status);
