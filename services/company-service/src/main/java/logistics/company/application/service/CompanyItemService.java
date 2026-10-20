@@ -10,7 +10,6 @@ import logistics.company.presentation.dto.request.companyItem.CompanyItemCreateR
 import logistics.company.presentation.dto.request.companyItem.CompanyItemSearchCondition;
 import logistics.company.presentation.dto.request.companyItem.CompanyItemUpdateRequest;
 import logistics.company.presentation.dto.response.CompanyItemResponse;
-import logistics.company.presentation.dto.response.CompanyResponse;
 import logistics.company.presentation.dto.response.internal.CompanyItemBulkResponse;
 import logistics.company.presentation.dto.response.internal.CompanyItemInternalResponse;
 import logistics.company.presentation.exception.BusinessException;
@@ -83,7 +82,7 @@ public class CompanyItemService {
 
     @Transactional
     public CompanyItemResponse updateItem(UUID itemId, UUID userId, String role, CompanyItemUpdateRequest request) {
-        // 1. 해당 상품 존재 확인
+        // 1. 수정할 상품 존재 확인
         CompanyItem companyItem = companyItemRepository.findById(itemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
 
@@ -93,7 +92,9 @@ public class CompanyItemService {
         }
 
         // 3. 기존 값과 비교해 실제로 바뀌는 항목만 판별 (null = 변경 안 함, 수정 취소)
-        boolean nameChanged = isChanged(request.getName(), companyItem.getName());
+        // 변경하는 상품명은 상품 등록처럼 앞뒤 공백 제거 후 비교, 저장
+        String newName = request.getName() == null ? null : request.getName().trim();
+        boolean nameChanged = isChanged(newName, companyItem.getName());
         boolean priceChanged = isChanged(request.getPrice(), companyItem.getPrice());
         boolean descriptionChanged = isChanged(request.getDescription(), companyItem.getDescription());
 
@@ -102,9 +103,14 @@ public class CompanyItemService {
             throw new BusinessException(ErrorCode.NO_UPDATE_FIELDS);
         }
 
-        // 4. 상품명, 가격, 설명 변경
+        // 4. 이미 존재하는 상품명과 중복되는지 확인
+        if (nameChanged && companyItemRepository.existsByCompanyIdAndName(companyItem.getCompany().getId(), newName)) {
+            throw new BusinessException(ErrorCode.ITEM_NAME_ALREADY_EXISTS);
+        }
+
+        // 5. 상품명, 가격, 설명 변경
         if (nameChanged) {
-            companyItem.changeName(request.getName());
+            companyItem.changeName(newName);
         }
         if (priceChanged) {
             companyItem.changePrice(request.getPrice());
