@@ -2,11 +2,10 @@ package logistics.company.presentation.controller;
 
 import jakarta.validation.Valid;
 import logistics.company.application.service.CompanyItemService;
-import logistics.company.presentation.dto.request.company.CompanySearchCondition;
 import logistics.company.presentation.dto.request.companyItem.CompanyItemCreateRequest;
 import logistics.company.presentation.dto.request.companyItem.CompanyItemSearchCondition;
+import logistics.company.presentation.dto.request.companyItem.CompanyItemUpdateRequest;
 import logistics.company.presentation.dto.response.CompanyItemResponse;
-import logistics.company.presentation.dto.response.CompanyResponse;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
@@ -52,5 +51,14 @@ public class CompanyItemController {
             Pageable pageable
     ) {
         return ResponseEntity.ok(companyItemService.searchItems(condition, pageable));
+    }
+
+    // 상품 수정
+    @PatchMapping("/api/items/{itemId}")
+    public ResponseEntity<CompanyItemResponse> updateItem(@PathVariable("itemId") UUID itemId,
+                                                         @RequestAttribute(USER_ID_HEADER) UUID userId,
+                                                         @RequestAttribute(ROLE_HEADER) String role,
+                                                         @Valid @RequestBody CompanyItemUpdateRequest request) {
+        return ResponseEntity.ok(companyItemService.updateItem(itemId, userId, role, request));
     }
 }
