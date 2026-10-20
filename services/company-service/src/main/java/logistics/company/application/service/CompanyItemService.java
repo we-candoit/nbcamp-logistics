@@ -52,6 +52,7 @@ public class CompanyItemService {
         return CompanyItemResponse.from(saved);
     }
 
+    @Transactional(readOnly = true)
     public CompanyItemBulkResponse getItems(List<UUID> ids) {
         // 1. ids 중복 체크
         List<UUID> distinctIds = ids.stream().distinct().toList();
