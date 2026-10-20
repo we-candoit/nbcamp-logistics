@@ -101,6 +101,12 @@ public class User extends BaseEntity {
                 UserRole.USER, AffiliationType.COMPANY, companyName, AffiliationStatus.PENDING);
     }
 
+    // 초기 MASTER 계정 - 소속 필드가 NOT NULL이라 COMPANY로 채움(의미없음)
+    public static User createMaster(String loginId, String password, String name, String slackId) {
+        return new User(loginId, password, name, null, slackId,
+                UserRole.MASTER, AffiliationType.COMPANY, "MASTER", AffiliationStatus.CONFIRMED);
+    }
+
     // 배송담당자 권한 부여
     public void grantDeliveryManager() {
         this.isDeliveryManager = true;
