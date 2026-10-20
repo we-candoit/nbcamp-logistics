@@ -6,8 +6,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -35,5 +37,19 @@ public class GlobalExceptionHandler {
         }
         ApiResponse<Map<String, String>> apiResponse = ApiResponse.fail("입력값 검증에 실패했습니다.", errors);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(apiResponse);
+    }
+
+    // @RequestHeader("X-User-Id")가 없을 때, 헤더 자체가 없을 때
+    @ExceptionHandler
+    public ResponseEntity<ApiResponse<Void>> missingHeaderExHandler(MissingRequestHeaderException e) {
+        ErrorCode errorCode = ErrorCode.MISSING_USER_HEADER;
+        return ResponseEntity.status(errorCode.getStatus()).body(ApiResponse.fail(errorCode.getMessage()));
+    }
+
+    // 헤더 값이 UUID나 MASTER/USER로 바뀌지 않을 때 (예: X-User-Id: abc), 헤더는 있으나 타입이 일치하지 않을 때
+    @ExceptionHandler
+    public ResponseEntity<ApiResponse<Void>> typeMismatchExHandler(MethodArgumentTypeMismatchException e) {
+        ErrorCode errorCode = ErrorCode.INVALID_USER_HEADER;
+        return ResponseEntity.status(errorCode.getStatus()).body(ApiResponse.fail(errorCode.getMessage()));
     }
 }
