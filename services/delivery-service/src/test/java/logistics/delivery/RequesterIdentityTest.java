@@ -13,7 +13,8 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.springframework.web.server.ResponseStatusException;
+import logistics.delivery.common.exception.DeliveryException;
+import logistics.delivery.common.exception.DeliveryErrorCode;
 
 import java.util.UUID;
 
@@ -91,7 +92,11 @@ class RequesterIdentityTest {
 
     private void assertRejected(MockHttpServletRequest request, int status) {
         assertThatThrownBy(() -> auth.preHandle(request, new MockHttpServletResponse(), new Object()))
-                .isInstanceOfSatisfying(ResponseStatusException.class,
-                        exception -> assertThat(exception.getStatusCode().value()).isEqualTo(status));
+                .isInstanceOfSatisfying(DeliveryException.class, exception -> {
+                    DeliveryErrorCode expected = status == 400 ? DeliveryErrorCode.INVALID_USER_ID
+                            : request.getHeader("X-User-Id") == null || request.getHeader("X-User-Id").isBlank()
+                                    ? DeliveryErrorCode.USER_ID_REQUIRED : DeliveryErrorCode.ROLE_REQUIRED;
+                    assertThat(exception.getErrorCode()).isEqualTo(expected);
+                });
     }
 }
