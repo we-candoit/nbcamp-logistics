@@ -5,6 +5,7 @@ import logistics.order.common.entity.BaseEntity;
 import logistics.order.domain.enums.OrderStatus;
 import logistics.order.common.exception.CustomException;
 import logistics.order.common.exception.ErrorCode;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -39,6 +40,7 @@ public class Order extends BaseEntity {
     private OrderStatus orderStatus = OrderStatus.WAITING;
 
 
+    @Builder
     public Order(UUID orderUserId, UUID requesterId, UUID destinationHubId, String address, String requestNote) {
         this.orderUserId = orderUserId;
         this.requesterId = requesterId;
