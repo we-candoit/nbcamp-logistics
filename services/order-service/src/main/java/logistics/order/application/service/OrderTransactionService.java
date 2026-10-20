@@ -64,7 +64,7 @@ public class OrderTransactionService {
         return order;
     }
 
-    //주문ID를 사용하여 특정 주문삭제 / 주문과 주문상품을 함께 soft delete
+    //주문ID를 사용하여 특정 주문삭제, 주문과 주문상품을 함께 soft delete
     @Transactional
     public Order delete(UUID orderId, UUID userId) {
         OrderItem orderItem = orderItemRepository.findWithOrder(orderId).orElseThrow(
@@ -77,7 +77,7 @@ public class OrderTransactionService {
         return order;
     }
 
-    //주문생성 실패시 보상 결과에 따라 주문상태 변경 / 보상 성공 FAILED, 보상 실패 COMPENSATION_FAILED
+    //주문생성 실패시 보상 결과에 따라 주문상태 변경, 보상 성공 FAILED, 보상 실패 COMPENSATION_FAILED
     @Transactional
     public void failCreate(UUID orderId, boolean compensated) {
         Order order = orderRepository.findByIdAndDeletedAtIsNull(orderId).orElseThrow(
@@ -90,9 +90,9 @@ public class OrderTransactionService {
         }
     }
 
-    //주문삭제 실패시 보상 시나리오 / 주문과 주문상품 삭제 취소
+    //주문ID를 사용하여 주문과 주문상품 삭제 되돌림, 삭제된 주문도 조회
     @Transactional
-    public void compensateDeleteOrder(UUID orderId) {
+    public void revertDelete(UUID orderId) {
         OrderItem orderItem = orderItemRepository.findWithOrderIncludingDeleted(orderId).orElseThrow(
                 () -> new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
 
@@ -100,9 +100,9 @@ public class OrderTransactionService {
         orderItem.revertDelete();
     }
 
-    //주문취소 실패시 보상 시나리오
+    //주문ID를 사용하여 주문취소 되돌림, CONFIRMED 상태로 복구
     @Transactional
-    public void compensateCancelOrder(UUID orderId) {
+    public void revertCancel(UUID orderId) {
         Order order = orderRepository.findByIdAndDeletedAtIsNull(orderId).orElseThrow(
                 () -> new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
 

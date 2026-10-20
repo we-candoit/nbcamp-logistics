@@ -404,8 +404,8 @@ class OrderTransactionServiceTest {
     }
 
     @Nested
-    @DisplayName("compensateCancelOrder()")
-    class CompensateCancelOrder {
+    @DisplayName("revertCancel()")
+    class RevertCancel {
 
         @Test
         public void 취소된_주문을_CONFIRMED로_복구한다() {
@@ -419,7 +419,7 @@ class OrderTransactionServiceTest {
             em.clear();
 
             //when
-            orderTransactionService.compensateCancelOrder(order.getId());
+            orderTransactionService.revertCancel(order.getId());
             em.flush();
             em.clear();
 
@@ -431,7 +431,7 @@ class OrderTransactionServiceTest {
         @Test
         public void 없는_주문이면_C404_예외가_발생한다() {
             //when, then
-            assertThatThrownBy(() -> orderTransactionService.compensateCancelOrder(UUID.randomUUID()))
+            assertThatThrownBy(() -> orderTransactionService.revertCancel(UUID.randomUUID()))
                     .isInstanceOf(CustomException.class)
                     .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
                             .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
@@ -567,8 +567,8 @@ class OrderTransactionServiceTest {
     }
 
     @Nested
-    @DisplayName("compensateDeleteOrder()")
-    class CompensateDeleteOrder {
+    @DisplayName("revertDelete()")
+    class RevertDelete {
 
         @Test
         public void 삭제된_주문과_주문상품을_복구한다() {
@@ -583,7 +583,7 @@ class OrderTransactionServiceTest {
             em.clear();
 
             //when
-            orderTransactionService.compensateDeleteOrder(order.getId());
+            orderTransactionService.revertDelete(order.getId());
             em.flush();
             em.clear();
 
@@ -598,7 +598,7 @@ class OrderTransactionServiceTest {
         @Test
         public void 없는_주문이면_C404_예외가_발생한다() {
             //when, then
-            assertThatThrownBy(() -> orderTransactionService.compensateDeleteOrder(UUID.randomUUID()))
+            assertThatThrownBy(() -> orderTransactionService.revertDelete(UUID.randomUUID()))
                     .isInstanceOf(CustomException.class)
                     .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
                             .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));

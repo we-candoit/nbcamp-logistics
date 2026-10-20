@@ -3,6 +3,7 @@ package logistics.order.application.service;
 import feign.FeignException;
 import feign.Request;
 import feign.RetryableException;
+import logistics.order.application.compensation.OrderCompensator;
 import logistics.order.application.validator.OrderValidator;
 import logistics.order.common.AuthHeaders;
 import logistics.order.domain.entity.Order;
@@ -74,7 +75,12 @@ class OrderServiceTest {
     private final ClientService clientService = new ClientService(
             companyServiceClient, hubServiceClient, deliveryServiceClient, userServiceClient, orderValidator);
 
-    private final OrderService orderService = new OrderService(orderValidator, orderTransactionService, clientService);
+    //보상 로직도 실제 객체 사용 (보상 호출 흐름까지 확인)
+    private final OrderCompensator orderCompensator =
+            new OrderCompensator(clientService, orderTransactionService);
+
+    private final OrderService orderService =
+            new OrderService(orderValidator, orderTransactionService, clientService, orderCompensator);
 
     //===== 목데이터 =====
     private final UUID userId = UUID.randomUUID();
@@ -339,16 +345,18 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 같은업체_검증에_실패하면_유저서비스를_조회하지_않는다() {
+        public void 유저를_먼저_조회한_뒤_같은업체_검증에_실패한다() {
             //given
             loginAs("COMPANY_MANAGER");
+            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(requesterId));
             CreateOrderRequest request = new CreateOrderRequest(requesterId, requesterId, itemId, price, quantity,
                     null, "홍길동", "010-1234-5678");
 
             //when, then
             assertThatThrownBy(() -> orderService.create(request))
                     .satisfies(e -> assertErrorCode(e, ErrorCode.C400_SAME_COMPANY));
-            verifyNoInteractions(userServiceClient);
+            verify(userServiceClient).fetchUserById(userId);
+            verifyNoInteractions(companyServiceClient, hubServiceClient, deliveryServiceClient, orderTransactionService);
         }
 
         @Test
@@ -364,7 +372,7 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 유저가_없으면_C403_FORBIDDEN_REQUESTER_예외가_발생하고_상품조회_전에_실패한다() {
+        public void 유저가_없으면_C404_USER_NOT_FOUND_예외가_발생하고_상품조회_전에_실패한다() {
             //given
             loginAs("COMPANY_MANAGER");
             given(userServiceClient.fetchUserById(userId))
@@ -372,7 +380,7 @@ class OrderServiceTest {
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest()))
-                    .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_REQUESTER));
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C404_USER_NOT_FOUND));
             verifyNoInteractions(companyServiceClient, hubServiceClient, deliveryServiceClient, orderTransactionService);
         }
 
@@ -438,7 +446,7 @@ class OrderServiceTest {
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest()))
-                    .satisfies(e -> assertErrorCode(e, ErrorCode.C400_ITEM_NOT_FOUND));
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C404_ITEM_NOT_FOUND));
             verifyNoInteractions(hubServiceClient, deliveryServiceClient, orderTransactionService);
         }
 
@@ -452,7 +460,7 @@ class OrderServiceTest {
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest()))
-                    .satisfies(e -> assertErrorCode(e, ErrorCode.C400_COMPANY_NOT_FOUND));
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C404_COMPANY_NOT_FOUND));
             verifyNoInteractions(hubServiceClient, deliveryServiceClient, orderTransactionService);
         }
 
@@ -767,7 +775,7 @@ class OrderServiceTest {
                 orderService.cancelOrderById(order.getId());
 
                 //then
-                verify(orderTransactionService, never()).compensateCancelOrder(any());
+                verify(orderTransactionService, never()).revertCancel(any());
             }
         }
 
@@ -778,7 +786,7 @@ class OrderServiceTest {
             //주문취소(조회/권한/상태 검증) 단계에서 실패하면 배송취소와 보상처리 모두 하지 않음
             private void assertNoDeliveryCallAndNoCompensation() {
                 verifyNoInteractions(deliveryServiceClient);
-                verify(orderTransactionService, never()).compensateCancelOrder(any());
+                verify(orderTransactionService, never()).revertCancel(any());
             }
 
             @Test
@@ -839,11 +847,11 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
-                verify(orderTransactionService).compensateCancelOrder(order.getId());
+                verify(orderTransactionService).revertCancel(order.getId());
             }
 
             @Test
-            public void 배송이_없어_404로_응답하면_취소불가_예외가_발생하고_주문을_복구한다() {
+            public void 배송이_없어_404로_응답하면_C404_DELIVERY_NOT_FOUND_예외가_발생하고_주문을_복구한다() {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
@@ -852,8 +860,8 @@ class OrderServiceTest {
 
                 //when, then
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
-                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
-                verify(orderTransactionService).compensateCancelOrder(order.getId());
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C404_DELIVERY_NOT_FOUND));
+                verify(orderTransactionService).revertCancel(order.getId());
             }
 
             @Test
@@ -867,7 +875,7 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
-                verify(orderTransactionService).compensateCancelOrder(order.getId());
+                verify(orderTransactionService).revertCancel(order.getId());
             }
 
             @Test
@@ -880,7 +888,7 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
                         .isInstanceOf(FeignException.InternalServerError.class);
-                verify(orderTransactionService).compensateCancelOrder(order.getId());
+                verify(orderTransactionService).revertCancel(order.getId());
             }
 
             @Test
@@ -894,7 +902,7 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
                         .isInstanceOf(RetryableException.class);
-                verify(orderTransactionService).compensateCancelOrder(order.getId());
+                verify(orderTransactionService).revertCancel(order.getId());
             }
 
             @Test
@@ -908,7 +916,21 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
                         .isInstanceOf(IllegalStateException.class);
-                verify(orderTransactionService).compensateCancelOrder(order.getId());
+                verify(orderTransactionService).revertCancel(order.getId());
+            }
+
+            @Test
+            public void 주문복구가_실패해도_1회_재시도하고_원래_예외를_그대로_전달한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                given(deliveryServiceClient.cancelDelivery(deliveryId)).willThrow(feignException());
+                willThrow(new RuntimeException("DB 오류")).given(orderTransactionService).revertCancel(order.getId());
+
+                //when, then
+                assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
+                        .isInstanceOf(FeignException.InternalServerError.class);
+                verify(orderTransactionService, times(2)).revertCancel(order.getId());
             }
         }
     }
@@ -975,7 +997,7 @@ class OrderServiceTest {
                 orderService.deleteOrderById(order.getId());
 
                 //then
-                verify(orderTransactionService, never()).compensateDeleteOrder(any());
+                verify(orderTransactionService, never()).revertDelete(any());
             }
         }
 
@@ -986,7 +1008,7 @@ class OrderServiceTest {
             //주문삭제(조회/권한/상태 검증) 단계에서 실패하면 배송삭제와 보상처리 모두 하지 않음
             private void assertNoDeliveryCallAndNoCompensation() {
                 verifyNoInteractions(deliveryServiceClient);
-                verify(orderTransactionService, never()).compensateDeleteOrder(any());
+                verify(orderTransactionService, never()).revertDelete(any());
             }
 
             @Test
@@ -1047,11 +1069,11 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_DELETABLE));
-                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+                verify(orderTransactionService).revertDelete(order.getId());
             }
 
             @Test
-            public void 배송이_없어_404로_응답하면_삭제불가_예외가_발생하고_주문을_복구한다() {
+            public void 배송이_없어_404로_응답하면_C404_DELIVERY_NOT_FOUND_예외가_발생하고_주문을_복구한다() {
                 //given
                 loginAs("MASTER");
                 Order order = givenDeletableOrder();
@@ -1060,8 +1082,8 @@ class OrderServiceTest {
 
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
-                        .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_DELETABLE));
-                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+                        .satisfies(e -> assertErrorCode(e, ErrorCode.C404_DELIVERY_NOT_FOUND));
+                verify(orderTransactionService).revertDelete(order.getId());
             }
 
             @Test
@@ -1074,7 +1096,7 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
                         .isInstanceOf(FeignException.InternalServerError.class);
-                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+                verify(orderTransactionService).revertDelete(order.getId());
             }
 
             @Test
@@ -1088,7 +1110,7 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
                         .isInstanceOf(RetryableException.class);
-                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+                verify(orderTransactionService).revertDelete(order.getId());
             }
 
             @Test
@@ -1102,7 +1124,21 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
                         .isInstanceOf(IllegalStateException.class);
-                verify(orderTransactionService).compensateDeleteOrder(order.getId());
+                verify(orderTransactionService).revertDelete(order.getId());
+            }
+
+            @Test
+            public void 주문복구가_실패해도_1회_재시도하고_원래_예외를_그대로_전달한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenDeletableOrder();
+                willThrow(feignException()).given(deliveryServiceClient).deleteDelivery(deliveryId);
+                willThrow(new RuntimeException("DB 오류")).given(orderTransactionService).revertDelete(order.getId());
+
+                //when, then
+                assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
+                        .isInstanceOf(FeignException.InternalServerError.class);
+                verify(orderTransactionService, times(2)).revertDelete(order.getId());
             }
         }
     }
