@@ -16,4 +16,9 @@ public interface HubServiceClient {
                          @PathVariable("itemId") UUID itemId,
                          @RequestParam("quantity") Long quantity);
 
+    @PostMapping("/internal/hubs/{hubId}/items/{itemId}/restorations")
+    String restoreStock(@PathVariable("hubId") UUID hubId,
+                         @PathVariable("itemId") UUID itemId,
+                         @RequestParam("quantity") Long quantity);
+
 }

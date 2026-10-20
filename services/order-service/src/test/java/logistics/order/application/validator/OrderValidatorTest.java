@@ -2,7 +2,6 @@ package logistics.order.application.validator;
 
 import logistics.order.common.AuthHeaders;
 import logistics.order.domain.entity.Order;
-import logistics.order.infrastructure.client.UserServiceClient;
 import logistics.order.infrastructure.client.dto.CancelDeliveryResponse;
 import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
@@ -25,16 +24,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 
 class OrderValidatorTest {
 
-    private final UserServiceClient userServiceClient = mock(UserServiceClient.class);
-    private final OrderValidator orderValidator = new OrderValidator(userServiceClient);
+    private final OrderValidator orderValidator = new OrderValidator();
 
     private final UUID userId = UUID.randomUUID();
     private final UUID requesterId = UUID.randomUUID();
@@ -79,37 +72,60 @@ class OrderValidatorTest {
     }
 
     @Nested
-    @DisplayName("validateOrder()")
-    class ValidateOrder {
+    @DisplayName("validateNotSameCompany()")
+    class ValidateNotSameCompany {
+
+        @Test
+        public void 요청업체와_공급업체가_다르면_통과한다() {
+            //when, then
+            assertThatCode(() -> orderValidator.validateNotSameCompany(requesterId, supplierId))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        public void 요청업체와_공급업체가_같으면_C400_SAME_COMPANY_예외가_발생한다() {
+            //when, then
+            assertThatThrownBy(() -> orderValidator.validateNotSameCompany(requesterId, requesterId))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C400_SAME_COMPANY));
+        }
+    }
+
+    @Nested
+    @DisplayName("validateUserBelongsToRequester()")
+    class ValidateUserBelongsToRequester {
 
         @Nested
         @DisplayName("정상 케이스")
         class Success {
 
             @Test
-            public void MASTER는_유저서비스_조회없이_통과한다() {
-                //given
-                loginAs("MASTER");
-                CreateOrderRequest request = orderRequest(requesterId, supplierId, price);
-
-                //when, then
-                assertThatCode(() -> orderValidator.validateOrder(request))
-                        .doesNotThrowAnyException();
-                verify(userServiceClient, never()).fetchUserById(any());
-            }
-
-            @Test
             public void 요청업체_소속_유저는_통과한다() {
                 //given
                 loginAs("COMPANY_MANAGER");
-                given(userServiceClient.fetchUserById(userId))
-                        .willReturn(new FetchUserByIdResponse(requesterId));
-                CreateOrderRequest request = orderRequest(requesterId, supplierId, price);
 
                 //when, then
-                assertThatCode(() -> orderValidator.validateOrder(request))
+                assertThatCode(() -> orderValidator.validateUserBelongsToRequester(requesterId, requesterId))
                         .doesNotThrowAnyException();
-                verify(userServiceClient).fetchUserById(userId);
+            }
+
+            @Test
+            public void MASTER는_소속업체가_달라도_통과한다() {
+                //given
+                loginAs("MASTER");
+
+                //when, then
+                assertThatCode(() -> orderValidator.validateUserBelongsToRequester(UUID.randomUUID(), requesterId))
+                        .doesNotThrowAnyException();
+            }
+
+            @Test
+            public void MASTER는_소속업체가_없어도_통과한다() {
+                //given
+                loginAs("MASTER");
+
+                //when, then
+                assertThatCode(() -> orderValidator.validateUserBelongsToRequester(null, requesterId))
+                        .doesNotThrowAnyException();
             }
         }
 
@@ -118,40 +134,12 @@ class OrderValidatorTest {
         class Failure {
 
             @Test
-            public void 요청업체와_공급업체가_같으면_C400_SAME_COMPANY_예외가_발생한다() {
-                //given
-                loginAs("MASTER");
-                CreateOrderRequest request = orderRequest(requesterId, requesterId, price);
-
-                //when, then
-                assertThatThrownBy(() -> orderValidator.validateOrder(request))
-                        .satisfies(e -> assertErrorCode(e, ErrorCode.C400_SAME_COMPANY));
-            }
-
-            @Test
-            public void 같은업체_검증에_실패하면_유저서비스를_조회하지_않는다() {
-                //given
-                loginAs("COMPANY_MANAGER");
-                CreateOrderRequest request = orderRequest(requesterId, requesterId, price);
-
-                //when
-                assertThatThrownBy(() -> orderValidator.validateOrder(request))
-                        .isInstanceOf(CustomException.class);
-
-                //then
-                verify(userServiceClient, never()).fetchUserById(any());
-            }
-
-            @Test
             public void 다른업체_소속_유저면_C403_FORBIDDEN_REQUESTER_예외가_발생한다() {
                 //given
                 loginAs("COMPANY_MANAGER");
-                given(userServiceClient.fetchUserById(userId))
-                        .willReturn(new FetchUserByIdResponse(UUID.randomUUID()));
-                CreateOrderRequest request = orderRequest(requesterId, supplierId, price);
 
                 //when, then
-                assertThatThrownBy(() -> orderValidator.validateOrder(request))
+                assertThatThrownBy(() -> orderValidator.validateUserBelongsToRequester(UUID.randomUUID(), requesterId))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_REQUESTER));
             }
 
@@ -159,12 +147,9 @@ class OrderValidatorTest {
             public void 유저의_소속업체가_null이면_C403_FORBIDDEN_REQUESTER_예외가_발생한다() {
                 //given
                 loginAs("COMPANY_MANAGER");
-                given(userServiceClient.fetchUserById(userId))
-                        .willReturn(new FetchUserByIdResponse(null));
-                CreateOrderRequest request = orderRequest(requesterId, supplierId, price);
 
                 //when, then
-                assertThatThrownBy(() -> orderValidator.validateOrder(request))
+                assertThatThrownBy(() -> orderValidator.validateUserBelongsToRequester(null, requesterId))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_REQUESTER));
             }
 
@@ -172,14 +157,10 @@ class OrderValidatorTest {
             public void 소문자_master는_MASTER로_인정되지_않아_소속검증을_거친다() {
                 //given
                 loginAs("master");
-                given(userServiceClient.fetchUserById(userId))
-                        .willReturn(new FetchUserByIdResponse(UUID.randomUUID()));
-                CreateOrderRequest request = orderRequest(requesterId, supplierId, price);
 
                 //when, then
-                assertThatThrownBy(() -> orderValidator.validateOrder(request))
+                assertThatThrownBy(() -> orderValidator.validateUserBelongsToRequester(UUID.randomUUID(), requesterId))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_REQUESTER));
-                verify(userServiceClient).fetchUserById(userId);
             }
         }
     }

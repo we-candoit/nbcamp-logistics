@@ -5,6 +5,7 @@ import logistics.order.common.entity.BaseEntity;
 import logistics.order.domain.enums.OrderStatus;
 import logistics.order.common.exception.CustomException;
 import logistics.order.common.exception.ErrorCode;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -39,6 +40,7 @@ public class Order extends BaseEntity {
     private OrderStatus orderStatus = OrderStatus.WAITING;
 
 
+    @Builder
     public Order(UUID orderUserId, UUID requesterId, UUID destinationHubId, String address, String requestNote) {
         this.orderUserId = orderUserId;
         this.requesterId = requesterId;
@@ -95,6 +97,20 @@ public class Order extends BaseEntity {
     public void revertCancel() {
         if (this.orderStatus == OrderStatus.CANCELLED) {
             this.orderStatus = OrderStatus.CONFIRMED;
+        }
+    }
+
+    //주문생성 실패, 보상이 모두 성공한 경우 WAITING 상태만 FAILED로 변경
+    public void failed() {
+        if (OrderStatus.WAITING == this.orderStatus) {
+            this.orderStatus = OrderStatus.FAILED;
+        }
+    }
+
+    //주문생성 실패, 보상이 실패한 경우 WAITING 상태만 COMPENSATION_FAILED로 변경 / 수동 처리 대상
+    public void compensationFailed() {
+        if (OrderStatus.WAITING == this.orderStatus) {
+            this.orderStatus = OrderStatus.COMPENSATION_FAILED;
         }
     }
 }
