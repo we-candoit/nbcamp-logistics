@@ -1,6 +1,7 @@
 package logistics.order.infrastructure.client;
 
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
+import logistics.order.infrastructure.client.dto.UserApiResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,6 +12,6 @@ import java.util.UUID;
 public interface UserServiceClient {
 
     @GetMapping("/api/users/{id}")
-    FetchUserByIdResponse fetchUserById(@PathVariable("id") UUID id);
+    UserApiResponse<FetchUserByIdResponse> fetchUserById(@PathVariable("id") UUID id);
 
 }

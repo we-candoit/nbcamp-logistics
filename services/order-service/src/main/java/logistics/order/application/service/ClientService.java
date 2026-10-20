@@ -4,17 +4,16 @@ import feign.FeignException;
 import logistics.order.application.validator.OrderValidator;
 import logistics.order.common.exception.CustomException;
 import logistics.order.common.exception.ErrorCode;
-import logistics.order.infrastructure.client.CompanyServiceClient;
-import logistics.order.infrastructure.client.DeliveryServiceClient;
-import logistics.order.infrastructure.client.HubServiceClient;
-import logistics.order.infrastructure.client.UserServiceClient;
+import logistics.order.infrastructure.client.*;
 import logistics.order.infrastructure.client.dto.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
 //외부 서비스 호출 및 Feign 예외 변환 / 보상처리 등 흐름 제어는 OrderService에서 담당
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ClientService {
@@ -23,15 +22,23 @@ public class ClientService {
     private final HubServiceClient hubServiceClient;
     private final DeliveryServiceClient deliveryServiceClient;
     private final UserServiceClient userServiceClient;
+    private final SlackClient slackClient;
     private final OrderValidator orderValidator;
 
     //유저 조회 / 요청한 유저가 없으면 요청업체 소속을 확인할 수 없어 권한 없음
+    //유저 서비스는 응답을 data로 감싸서 반환, data가 없으면 유저 정보를 확인할 수 없어 서버 오류
     public FetchUserByIdResponse fetchUserById(UUID userId) {
+        UserApiResponse<FetchUserByIdResponse> response;
         try {
-            return userServiceClient.fetchUserById(userId);
+            response = userServiceClient.fetchUserById(userId);
         } catch (FeignException.NotFound e) {
             throw new CustomException(ErrorCode.C404_USER_NOT_FOUND);
         }
+
+        if (response == null || response.getData() == null) {
+            throw new CustomException(ErrorCode.C500_INTERNAL_SERVER_ERROR);
+        }
+        return response.getData();
     }
 
     //상품 조회 / 요청한 상품이 없으면 잘못된 요청
@@ -111,6 +118,15 @@ public class ClientService {
 
             //응답 없음(-1), 5xx는 전역 처리기로 전달
             throw e;
+        }
+    }
+
+    //슬랙 DM 전송 / 알림 실패가 주문 처리 결과에 영향을 주지 않도록 예외는 로그만 남김
+    public void sendSlackDm(String slackUserId, String message) {
+        try {
+            slackClient.sendDm(slackUserId, message);
+        } catch (RuntimeException e) {
+            log.warn("슬랙 DM 전송 실패 slackUserId={}", slackUserId, e);
         }
     }
 }
