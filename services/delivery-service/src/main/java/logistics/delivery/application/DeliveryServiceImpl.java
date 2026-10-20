@@ -123,8 +123,7 @@ public class DeliveryServiceImpl implements DeliveryService{
             throw new DeliveryException(DeliveryErrorCode.ACCESS_DENIED);
         }
 
-        Delivery delivery = deliveryRepository.findByIdAndDeletedAtIsNull(deliveryId)
-                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
+        Delivery delivery = deliveryRepository.getNotDeletedById(deliveryId);
 
         // MASTER, 배송 또는 배송 경로 담당자는 바로 조회 허용
         if("MASTER".equals(role) || isDeliveryManager(delivery, userId)){
@@ -279,8 +278,7 @@ public class DeliveryServiceImpl implements DeliveryService{
     @Transactional
     public DeliveryCancelResponse cancelDelivery(UUID deliveryId) {
 
-        Delivery delivery = deliveryRepository.findById(deliveryId)
-                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
+        Delivery delivery = deliveryRepository.getByIdIncludingDeleted(deliveryId);
 
         if(delivery.getDeletedAt() != null){
             throw new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND);
@@ -311,8 +309,7 @@ public class DeliveryServiceImpl implements DeliveryService{
     @Transactional
     public void deleteDelivery(UUID deliveryId) {
 
-        Delivery delivery = deliveryRepository.findById(deliveryId)
-                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
+        Delivery delivery = deliveryRepository.getByIdIncludingDeleted(deliveryId);
 
         if(delivery.getDeletedAt() != null) return;
 
@@ -355,11 +352,9 @@ public class DeliveryServiceImpl implements DeliveryService{
             throw new DeliveryException(DeliveryErrorCode.REQUESTER_REQUIRED);
         }
 
-        Delivery delivery = deliveryRepository.findByIdAndDeletedAtIsNull(deliveryId)
-                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
+        Delivery delivery = deliveryRepository.getNotDeletedById(deliveryId);
 
-        DeliveryRoute route = deliveryRouteRepository.findByIdAndDeliveryIdAndDeletedAtIsNull(routeId, deliveryId)
-                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_ROUTE_NOT_FOUND));
+        DeliveryRoute route = deliveryRouteRepository.getNotDeletedByIdAndDeliveryId(routeId, deliveryId);
 
         delivery.validateManagerAssignable();
 
@@ -440,11 +435,9 @@ public class DeliveryServiceImpl implements DeliveryService{
             throw new DeliveryException(DeliveryErrorCode.REQUESTER_REQUIRED);
         }
 
-        Delivery delivery = deliveryRepository.findByIdAndDeletedAtIsNull(deliveryId)
-                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
+        Delivery delivery = deliveryRepository.getNotDeletedById(deliveryId);
 
-        DeliveryRoute route = deliveryRouteRepository.findByIdAndDeliveryIdAndDeletedAtIsNull(routeId, deliveryId)
-                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_ROUTE_NOT_FOUND));
+        DeliveryRoute route = deliveryRouteRepository.getNotDeletedByIdAndDeliveryId(routeId, deliveryId);
 
         if (!"MASTER".equals(role) && !requesterId.equals(route.getManagerId())) {
             throw new DeliveryException(DeliveryErrorCode.ROUTE_STATUS_UPDATE_FORBIDDEN);
