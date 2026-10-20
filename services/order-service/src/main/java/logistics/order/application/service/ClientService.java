@@ -57,6 +57,11 @@ public class ClientService {
         hubServiceClient.decreaseStock(hubId, itemId, quantity);
     }
 
+    //재고 복구
+    public void restoreStock(UUID hubId, UUID itemId, Long quantity) {
+        hubServiceClient.restoreStock(hubId, itemId, quantity);
+    }
+
     //배송 생성
     public CreateDeliveryResponse createDelivery(CreateDeliveryRequest request) {
         return deliveryServiceClient.createDelivery(request);
