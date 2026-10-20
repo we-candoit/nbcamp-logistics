@@ -1,7 +1,10 @@
 package logistics.user.application.service;
 
+import feign.FeignException;
 import logistics.user.domain.entity.User;
 import logistics.user.domain.enums.UserRole;
+import logistics.user.infrastructure.client.CompanyClient;
+import logistics.user.infrastructure.client.CompanyResponse;
 import logistics.user.infrastructure.repository.UserRepository;
 import logistics.user.presentation.dto.response.UserDetailResponse;
 import logistics.user.presentation.exception.CustomException;
@@ -19,6 +22,7 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class UserService {
 
+    private final CompanyClient companyClient;
     private final UserRepository userRepository;
 
     // 내 정보 상세 조회 - 유저, 관리자 가능
@@ -63,5 +67,47 @@ public class UserService {
 
         user.updateProfile(name, email);
         return new UserDetailResponse(user);
+    }
+
+    // 업체 관리자로 등록하며 업체 소속 신청
+    @Transactional
+    public void confirmCompany(UUID userId, UUID companyId, String companyName) {
+        User user = userRepository.findById(userId).orElseThrow(
+                () -> new CustomException(ErrorCode.USER_NOT_FOUND)
+        );
+        user.confirmCompany(companyId, companyName);
+    }
+
+    // 이미 존재하는 회사에 소속 신청
+    @Transactional
+    public UserDetailResponse applyCompany(UUID requesterId, UserRole requesterRole, String companyName) {
+        User user = userRepository.findById(requesterId).orElseThrow(
+                () -> new CustomException(ErrorCode.USER_NOT_FOUND)
+        );
+        CompanyResponse company = findCompany(requesterId, requesterRole, companyName);
+        user.confirmCompany(company.getCompanyId(), company.getName());
+        return new UserDetailResponse(user);
+    }
+
+    private CompanyResponse findCompany(UUID requesterId, UserRole requesterRole, String companyName) {
+        List<CompanyResponse> companies;
+        try {
+            companies = companyClient.searchCompanies(companyName, 50, requesterId, requesterRole.name()).getContent();
+        } catch (FeignException.NotFound e) {
+            throw new CustomException(ErrorCode.COMPANY_NOT_FOUND);
+        } catch (FeignException e) {
+            throw new CustomException(ErrorCode.COMPANY_SERVICE_UNAVAILABLE);
+        }
+        // 이름에 해당하는 업체가 아예 없을 때
+        if (companies.isEmpty()) {
+            throw new CustomException(ErrorCode.COMPANY_NOT_FOUND);
+        }
+        // 업체가 부분 검색이라 정확히 일치하는 이름을 반환
+        for (CompanyResponse company : companies) {
+            if (company.getName().equals(companyName)) {
+                return company;
+            }
+        }
+        throw new CustomException(ErrorCode.COMPANY_NOT_FOUND);
     }
 }

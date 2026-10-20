@@ -5,6 +5,8 @@ import logistics.user.common.entity.BaseEntity;
 import logistics.user.domain.enums.AffiliationStatus;
 import logistics.user.domain.enums.AffiliationType;
 import logistics.user.domain.enums.UserRole;
+import logistics.user.presentation.exception.CustomException;
+import logistics.user.presentation.exception.ErrorCode;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -122,5 +124,16 @@ public class User extends BaseEntity {
         if (email != null) {
             this.email = email;
         }
+    }
+
+    // 업체 소속 확정 시 유저 정보 업데이트
+    public void confirmCompany(UUID companyId, String companyName) {
+        // COMPANY이면서, PENDING 상태여야 가능
+        if (affiliationType != AffiliationType.COMPANY || affiliationStatus != AffiliationStatus.PENDING) {
+            throw new CustomException(ErrorCode.INVALID_AFFILIATION_STATUS);
+        }
+        this.companyId = companyId;
+        this.affiliationName = companyName;
+        this.affiliationStatus = AffiliationStatus.CONFIRMED;
     }
 }
