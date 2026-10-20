@@ -26,8 +26,9 @@ public class OrderService {
 
     //주문생성
     public CreateOrderResponse create(CreateOrderRequest request) {
-        //올바른 요청 및 상품 인지 검증
-        orderValidator.validateOrder(request);
+        orderValidator.validateNotSameCompany(request.getRequesterId(), request.getSupplierId());
+        FetchUserByIdResponse user = clientService.fetchUserById(AuthContext.getUserId());
+        orderValidator.validateUserBelongsToRequester(user.getCompanyId(), request.getRequesterId());
         FetchItemByIdResponse item = clientService.fetchItemById(request.getItemId());
         orderValidator.validateOrderItem(item, request);
 

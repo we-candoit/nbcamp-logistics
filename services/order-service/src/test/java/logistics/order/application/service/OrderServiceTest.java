@@ -63,10 +63,10 @@ class OrderServiceTest {
     private final OrderTransactionService orderTransactionService = mock(OrderTransactionService.class);
 
     //검증 로직은 실제 객체 사용 (목데이터로 실제 검증 흐름까지 확인)
-    private final OrderValidator orderValidator = new OrderValidator(userServiceClient);
+    private final OrderValidator orderValidator = new OrderValidator();
 
     private final ClientService clientService = new ClientService(
-            companyServiceClient, hubServiceClient, deliveryServiceClient, orderValidator);
+            companyServiceClient, hubServiceClient, deliveryServiceClient, userServiceClient, orderValidator);
 
     private final OrderService orderService = new OrderService(orderValidator, orderTransactionService, clientService);
 
@@ -123,6 +123,8 @@ class OrderServiceTest {
 
     //외부 API가 모두 정상 응답하는 상황
     private void givenExternalApisSucceed() {
+        //MASTER도 유저 레코드가 있어 항상 조회 (이후 Slack ID 사용 예정)
+        given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(requesterId));
         given(companyServiceClient.fetchItemById(itemId)).willReturn(itemResponse());
         given(companyServiceClient.fetchCompanyById(requesterId))
                 .willReturn(companyResponse(requesterId, requesterHubId, "요청업체", "서울시 강남구 테헤란로 1"));
@@ -173,7 +175,20 @@ class OrderServiceTest {
             assertThat(response.getDeliveryId()).isEqualTo(deliveryId);
             //save()가 Mock이라 Auditing이 동작하지 않아 createdAt은 null
             assertThat(response.getCreatedAt()).isNull();
-            verify(userServiceClient, never()).fetchUserById(any());
+        }
+
+        @Test
+        public void MASTER도_유저를_조회하고_소속업체가_달라도_주문이_생성된다() {
+            //given
+            loginAs("MASTER");
+            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(UUID.randomUUID()));
+
+            //when
+            CreateOrderResponse response = orderService.create(orderRequest());
+
+            //then
+            assertThat(response.getDeliveryId()).isEqualTo(deliveryId);
+            verify(userServiceClient).fetchUserById(userId);
         }
 
         @Test
@@ -293,6 +308,68 @@ class OrderServiceTest {
             assertThatThrownBy(() -> orderService.create(request))
                     .satisfies(e -> assertErrorCode(e, ErrorCode.C400_SAME_COMPANY));
             verifyNoInteractions(companyServiceClient, hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 같은업체_검증에_실패하면_유저서비스를_조회하지_않는다() {
+            //given
+            loginAs("COMPANY_MANAGER");
+            CreateOrderRequest request = new CreateOrderRequest(requesterId, requesterId, itemId, price, quantity,
+                    null, "홍길동", "010-1234-5678");
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(request))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C400_SAME_COMPANY));
+            verifyNoInteractions(userServiceClient);
+        }
+
+        @Test
+        public void 유저의_소속업체가_null이면_상품조회_전에_실패한다() {
+            //given
+            loginAs("COMPANY_MANAGER");
+            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_REQUESTER));
+            verifyNoInteractions(companyServiceClient, hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 유저가_없으면_C403_FORBIDDEN_REQUESTER_예외가_발생하고_상품조회_전에_실패한다() {
+            //given
+            loginAs("COMPANY_MANAGER");
+            given(userServiceClient.fetchUserById(userId))
+                    .willThrow(new FeignException.NotFound("Not Found", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_REQUESTER));
+            verifyNoInteractions(companyServiceClient, hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 유저조회가_404가_아닌_에러면_FeignException을_그대로_전달한다() {
+            //given
+            loginAs("COMPANY_MANAGER");
+            given(userServiceClient.fetchUserById(userId)).willThrow(feignException());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .isInstanceOf(FeignException.InternalServerError.class);
+            verifyNoInteractions(companyServiceClient, hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 소문자_master는_MASTER로_인정되지_않아_소속검증을_거친다() {
+            //given
+            loginAs("master");
+            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(UUID.randomUUID()));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_REQUESTER));
+            verify(userServiceClient).fetchUserById(userId);
         }
 
         @Test

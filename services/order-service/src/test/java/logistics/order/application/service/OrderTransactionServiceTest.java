@@ -8,7 +8,6 @@ import logistics.order.domain.entity.Order;
 import logistics.order.domain.entity.OrderItem;
 import logistics.order.domain.enums.OrderStatus;
 import logistics.order.infrastructure.AuditorAwareImpl;
-import logistics.order.infrastructure.client.UserServiceClient;
 import logistics.order.infrastructure.repository.OrderItemRepository;
 import logistics.order.infrastructure.repository.OrderRepository;
 import logistics.order.common.exception.CustomException;
@@ -38,7 +37,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
 
 //H2 인메모리 DB로 JPA 계층만 띄워서 실제 저장 동작 확인
 @DataJpaTest(properties = "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect")
@@ -53,10 +51,10 @@ class OrderTransactionServiceTest {
             return new AuditorAwareImpl();
         }
 
-        //취소 시 권한/상태 검증은 실제 검증기로 확인 (유저서비스 호출은 사용하지 않음)
+        //취소/삭제 시 권한 검증은 실제 검증기로 확인
         @Bean
         OrderValidator orderValidator() {
-            return new OrderValidator(mock(UserServiceClient.class));
+            return new OrderValidator();
         }
     }
 

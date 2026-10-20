@@ -7,6 +7,7 @@ import logistics.order.common.exception.ErrorCode;
 import logistics.order.infrastructure.client.CompanyServiceClient;
 import logistics.order.infrastructure.client.DeliveryServiceClient;
 import logistics.order.infrastructure.client.HubServiceClient;
+import logistics.order.infrastructure.client.UserServiceClient;
 import logistics.order.infrastructure.client.dto.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,7 +22,17 @@ public class ClientService {
     private final CompanyServiceClient companyServiceClient;
     private final HubServiceClient hubServiceClient;
     private final DeliveryServiceClient deliveryServiceClient;
+    private final UserServiceClient userServiceClient;
     private final OrderValidator orderValidator;
+
+    //유저 조회 / 요청한 유저가 없으면 요청업체 소속을 확인할 수 없어 권한 없음
+    public FetchUserByIdResponse fetchUserById(UUID userId) {
+        try {
+            return userServiceClient.fetchUserById(userId);
+        } catch (FeignException.NotFound e) {
+            throw new CustomException(ErrorCode.C403_FORBIDDEN_REQUESTER);
+        }
+    }
 
     //상품 조회 / 요청한 상품이 없으면 잘못된 요청
     public FetchItemByIdResponse fetchItemById(UUID itemId) {
