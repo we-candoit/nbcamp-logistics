@@ -1,6 +1,7 @@
 package logistics.delivery.presentation.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import logistics.delivery.presentation.exception.DeliveryErrorResponse;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -58,22 +59,32 @@ public interface DeliveryInternalApiSpec {
             @ApiResponse(
                     responseCode = "400",
                     description = "입력값 검증 실패",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
                     description = "사용자 ID 또는 역할 헤더 누락, 공백",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "409",
                     description = "동일 주문의 생성 내용 충돌",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "503",
                     description = "연동 서비스 장애로 배송 생성 불가",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "예상하지 못한 서버 오류",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             )
     })
     ResponseEntity<DeliveryCreateResponse> createDelivery(
@@ -106,22 +117,32 @@ public interface DeliveryInternalApiSpec {
             @ApiResponse(
                     responseCode = "400",
                     description = "잘못된 배송 ID",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
                     description = "사용자 ID 또는 역할 헤더 누락, 공백",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "404",
                     description = "배송이 없거나 논리 삭제된 상태",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "409",
                     description = "배송 또는 배송 경로가 이미 출발한 상태라 취소 불가",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "예상하지 못한 서버 오류",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             )
     })
     ResponseEntity<DeliveryCancelResponse> cancelDelivery(
@@ -146,27 +167,38 @@ public interface DeliveryInternalApiSpec {
             @ApiResponse(
                     responseCode = "204",
                     description = "논리 삭제 성공 또는 이미 삭제된 배송",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "400",
                     description = "잘못된 배송 ID 형식",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
                     description = "사용자 ID 또는 역할 헤더 누락, 공백",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "404",
                     description = "배송이 존재하지 않음",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "409",
                     description = "취소되지 않은 배송은 삭제 불가",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "예상하지 못한 서버 오류",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             )
     })
     ResponseEntity<Void> deleteDelivery(
