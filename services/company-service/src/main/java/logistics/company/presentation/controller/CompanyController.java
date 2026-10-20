@@ -1,11 +1,14 @@
 package logistics.company.presentation.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 import logistics.company.application.service.CompanyService;
 import logistics.company.presentation.dto.request.company.CompanyCreateRequest;
 import logistics.company.presentation.dto.request.company.CompanySearchCondition;
 import logistics.company.presentation.dto.request.company.CompanyUpdateRequest;
 import logistics.company.presentation.dto.response.CompanyResponse;
+import logistics.company.presentation.dto.response.internal.CompanyBulkResponse;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
@@ -16,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -28,7 +32,7 @@ public class CompanyController {
 
     @PostMapping("/api/companies")
     public ResponseEntity<CompanyResponse> createCompany(@RequestAttribute(ROLE_HEADER) String role,
-                                                 @Valid @RequestBody CompanyCreateRequest request) {
+                                                         @Valid @RequestBody CompanyCreateRequest request) {
         CompanyResponse response = companyService.createCompany(role, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -56,5 +60,14 @@ public class CompanyController {
                                                          @RequestAttribute(ROLE_HEADER) String role,
                                                          @Valid @RequestBody CompanyUpdateRequest request) {
         return ResponseEntity.ok(companyService.updateCompany(companyId, userId, role, request));
+    }
+
+    // 내부 API: 업체 복수 조회
+    @GetMapping("/internal/companies")
+    public ResponseEntity<CompanyBulkResponse> getCompanies(@RequestParam(value = "ids", required = false)
+                                                            @NotEmpty(message = "조회할 업체 ID가 없습니다.")
+                                                            @Size(max = 100, message = "한 번에 최대 100개까지 조회할 수 있습니다.")
+                                                            List<UUID> ids) {
+        return ResponseEntity.ok(companyService.getCompanies(ids));
     }
 }
