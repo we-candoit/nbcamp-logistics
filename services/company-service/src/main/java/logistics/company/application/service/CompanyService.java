@@ -1,11 +1,9 @@
 package logistics.company.application.service;
 
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Size;
 import logistics.company.domain.entity.Company;
-import logistics.company.domain.entity.CompanyItem;
 import logistics.company.infrastructure.client.HubClient;
 import logistics.company.infrastructure.client.UserClient;
+import logistics.company.infrastructure.client.dto.UserAffiliationUpdateRequest;
 import logistics.company.infrastructure.client.dto.UserResponse;
 import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.infrastructure.repository.CompanySpecification;
@@ -15,7 +13,6 @@ import logistics.company.presentation.dto.request.company.CompanyUpdateRequest;
 import logistics.company.presentation.dto.response.CompanyResponse;
 import logistics.company.presentation.dto.response.internal.CompanyBulkResponse;
 import logistics.company.presentation.dto.response.internal.CompanyInternalResponse;
-import logistics.company.presentation.dto.response.internal.CompanyItemBulkResponse;
 import logistics.company.presentation.exception.BusinessException;
 import logistics.company.presentation.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -68,6 +65,7 @@ public class CompanyService {
 
         // 6. 소속 확정(companyId 갱신, CONFIRMED, 소속 업체명(affiliationName) 갱신, 유저 확정 실패하면 생성한 업체는 삭제로 보상
         // Todo (FeignClient 연동): user-service 소속 확정 호출
+        userClient.updateAffiliation(managerUserId, UserAffiliationUpdateRequest.confirm(saved.getId(), saved.getName()));
 
         return CompanyResponse.from(saved);
     }

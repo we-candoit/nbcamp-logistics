@@ -4,14 +4,18 @@ import jakarta.validation.Valid;
 import logistics.company.domain.entity.Company;
 import logistics.company.domain.entity.CompanyItem;
 import logistics.company.infrastructure.repository.CompanyItemRepository;
+import logistics.company.infrastructure.repository.CompanyItemSpecification;
 import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.presentation.dto.request.companyItem.CompanyItemCreateRequest;
+import logistics.company.presentation.dto.request.companyItem.CompanyItemSearchCondition;
 import logistics.company.presentation.dto.response.CompanyItemResponse;
 import logistics.company.presentation.dto.response.internal.CompanyItemBulkResponse;
 import logistics.company.presentation.dto.response.internal.CompanyItemInternalResponse;
 import logistics.company.presentation.exception.BusinessException;
 import logistics.company.presentation.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +56,29 @@ public class CompanyItemService {
         return CompanyItemResponse.from(saved);
     }
 
+    public CompanyItemResponse getItem(UUID itemId) {
+        CompanyItem item = companyItemRepository.findById(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        return CompanyItemResponse.from(item);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CompanyItemResponse> searchItems(@Valid CompanyItemSearchCondition condition, Pageable pageable) {
+        // 최소 가격 > 최대 가격이면 400, 잘못된 범위는 조회하지 않음
+        if (condition.invalidPriceRange()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        return companyItemRepository.findAll(
+                CompanyItemSpecification.search(
+                        condition.getItemId(), condition.getCompanyId(),
+                        condition.getItemName(), condition.getCompanyName(), condition.getDescription(),
+                        condition.getMinPrice(), condition.getMaxPrice()
+                ), pageable
+        ).map(CompanyItemResponse::from);
+    }
+
+    // 내부 API: 업체 상품 복수 조회
     @Transactional(readOnly = true)
     public CompanyItemBulkResponse getItems(List<UUID> ids) {
         // 1. ids 중복 체크
@@ -73,7 +100,7 @@ public class CompanyItemService {
         // 5. 찾았으면 CompanyItemInternalResponse, 못 찾았으면 id만 notFoundIds 저장
         for (UUID id : distinctIds) {
             CompanyItem item = companyItemMap.get(id);
-            if(item != null) {
+            if (item != null) {
                 responses.add(CompanyItemInternalResponse.from(item));
             } else {
                 notFoundIds.add(id);
