@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 import java.util.UUID;
 
 @Entity @Getter
-@Table(name = "p_order_item")
+@Table(name = "p_order_items")
 @NoArgsConstructor
 public class OrderItem extends BaseEntity {
 
