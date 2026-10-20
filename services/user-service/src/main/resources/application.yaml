@@ -26,3 +26,10 @@ eureka:
 jwt:
   secret-key: ${JWT_SECRET_KEY}
   expiration: ${JWT_EXPIRATION}
+
+#  마스터 계정 초기 값
+master:
+  login-id: ${MASTER_LOGIN_ID}
+  password: ${MASTER_PASSWORD}
+  name: ${MASTER_NAME}
+  slack-id: ${MASTER_SLACK_ID}

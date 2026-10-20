@@ -21,7 +21,7 @@ public class UserDetailResponse {
     private final UserRole role;
     // Lombok getter(isDeliveryManager())를 Jackson이 "deliveryManager"로 바꾸지 않게 키를 고정
     @JsonProperty("isDeliveryManager")
-    private final boolean isDeliveryManager;
+    private final boolean deliveryManager;
     private final AffiliationType affiliationType;
     private final String affiliationName;
     private final AffiliationStatus affiliationStatus;
@@ -36,7 +36,7 @@ public class UserDetailResponse {
         this.email = user.getEmail();
         this.slackId = user.getSlackId();
         this.role = user.getRole();
-        this.isDeliveryManager = user.isDeliveryManager();
+        this.deliveryManager = user.isDeliveryManager();
         this.affiliationType = user.getAffiliationType();
         this.affiliationName = user.getAffiliationName();
         this.affiliationStatus = user.getAffiliationStatus();
