@@ -8,7 +8,9 @@ import logistics.company.infrastructure.repository.CompanyItemSpecification;
 import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.presentation.dto.request.companyItem.CompanyItemCreateRequest;
 import logistics.company.presentation.dto.request.companyItem.CompanyItemSearchCondition;
+import logistics.company.presentation.dto.request.companyItem.CompanyItemUpdateRequest;
 import logistics.company.presentation.dto.response.CompanyItemResponse;
+import logistics.company.presentation.dto.response.CompanyResponse;
 import logistics.company.presentation.dto.response.internal.CompanyItemBulkResponse;
 import logistics.company.presentation.dto.response.internal.CompanyItemInternalResponse;
 import logistics.company.presentation.exception.BusinessException;
@@ -77,6 +79,49 @@ public class CompanyItemService {
                         condition.getMinPrice(), condition.getMaxPrice()
                 ), pageable
         ).map(CompanyItemResponse::from);
+    }
+
+    @Transactional
+    public CompanyItemResponse updateItem(UUID itemId, UUID userId, String role, CompanyItemUpdateRequest request) {
+        // 1. 해당 상품 존재 확인
+        CompanyItem companyItem = companyItemRepository.findById(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+
+        // 2. 권한 체크 : MASTER 또는 해당 업체 관리자인지 확인
+        if (!MASTER.equals(role) && !companyItem.isManagedBy(userId)) { // MASTER or 해당 업체 관리자가 아닌 경우
+            throw new BusinessException(ErrorCode.ITEM_FORBIDDEN);
+        }
+
+        // 3. 기존 값과 비교해 실제로 바뀌는 항목만 판별 (null = 변경 안 함, 수정 취소)
+        boolean nameChanged = isChanged(request.getName(), companyItem.getName());
+        boolean priceChanged = isChanged(request.getPrice(), companyItem.getPrice());
+        boolean descriptionChanged = isChanged(request.getDescription(), companyItem.getDescription());
+
+        // 바뀌는 항목이 없으면 400 (모두 null이거나 모두 기존과 같은 경우)
+        if (!nameChanged && !priceChanged && !descriptionChanged) {
+            throw new BusinessException(ErrorCode.NO_UPDATE_FIELDS);
+        }
+
+        // 4. 상품명, 가격, 설명 변경
+        if (nameChanged) {
+            companyItem.changeName(request.getName());
+        }
+        if (priceChanged) {
+            companyItem.changePrice(request.getPrice());
+        }
+        if (descriptionChanged) {
+            companyItem.changeDescription(request.getDescription());
+        }
+
+        // 6. 수정사항 즉시 반영
+        companyItemRepository.flush();
+
+        return CompanyItemResponse.from(companyItem);
+    }
+
+    private boolean isChanged(Object requested, Object current) {
+        // 요청 값이 있고, 기존 값과 다르면 변경 대상
+        return requested != null && !Objects.equals(requested, current);
     }
 
     // 내부 API: 업체 상품 복수 조회
