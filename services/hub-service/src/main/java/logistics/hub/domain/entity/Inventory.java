@@ -10,7 +10,7 @@ import java.util.UUID;
 
 @Entity
 @Getter
-@Table(name = "p_hub_items", uniqueConstraints = {@UniqueConstraint(name = "uk_hub_item s_hub_product", columnNames = {"hub_id", "product_id"})})
+@Table(name = "p_hub_items", uniqueConstraints = {@UniqueConstraint(name = "uk_hub_items_hub_product", columnNames = {"hub_id", "product_id"})})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Inventory extends BaseEntity {
 
@@ -61,4 +61,16 @@ public class Inventory extends BaseEntity {
 
     }
 
+    public void restock(Integer amount, UUID userId) {
+        if (amount == null || amount <= 0) {
+            throw new IllegalArgumentException(
+                    "입고 수량은 1 이상이어야 합니다."
+            );
+        }
+
+        long increasedQuantity = (long) this.quantity + amount;
+
+        this.quantity = (int) increasedQuantity;
+        changeUpdatedBy(userId);
+    }
 }

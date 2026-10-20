@@ -1,12 +1,12 @@
 package logistics.hub.presentation.controller;
 
+import jakarta.validation.Valid;
+import logistics.hub.application.service.InventoryRestockService;
 import logistics.hub.application.service.InventoryService;
+import logistics.hub.presentation.dto.request.InventoryRestockRequest;
 import logistics.hub.presentation.dto.response.InventoryResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
@@ -17,6 +17,7 @@ import java.util.UUID;
 public class InventoryController {
 
     private final InventoryService inventoryService;
+    private final InventoryRestockService inventoryRestockService;
 
     @GetMapping
     public List<InventoryResponse> getInventories(@PathVariable("hubId") UUID hubId) {
@@ -26,5 +27,25 @@ public class InventoryController {
     @GetMapping("/{itemId}")
     public InventoryResponse getInventory(@PathVariable("hubId") UUID hubId, @PathVariable("itemId") UUID productId) {
         return inventoryService.getInventory(hubId, productId);
+    }
+
+    @PatchMapping("/{itemId}")
+    public InventoryResponse restock(
+            @PathVariable("hubId") UUID hubId,
+            @PathVariable("itemId") UUID productId,
+            @Valid @RequestBody InventoryRestockRequest request,
+            @RequestAttribute(value = "userId", required = false) UUID userId,
+            @RequestAttribute(value = "role", required = false) String role,
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization
+    ) {
+        return inventoryRestockService.restock(
+                hubId,
+                productId,
+                request,
+                userId,
+                role,
+                authorization
+        );
     }
 }

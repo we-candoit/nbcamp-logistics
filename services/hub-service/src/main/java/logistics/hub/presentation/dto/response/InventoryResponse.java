@@ -14,9 +14,14 @@ public class InventoryResponse {
     private final Integer quantity;
 
     public InventoryResponse(Inventory inventory) {
+        this(inventory, inventory.getQuantity());
+    }
+
+    // 재시도 응답에는 입고 직후 수량을 사용한다.
+    public InventoryResponse(Inventory inventory, Integer quantity) {
         this.id = inventory.getId();
         this.hubId = inventory.getHub().getId();
         this.productId = inventory.getProductId();
-        this.quantity = inventory.getQuantity();
+        this.quantity = quantity;
     }
 }
