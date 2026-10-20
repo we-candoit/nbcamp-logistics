@@ -1,6 +1,7 @@
 package logistics.delivery.presentation.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import logistics.delivery.presentation.exception.DeliveryErrorResponse;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -47,17 +48,26 @@ public interface DeliveryApiSpec {
             @ApiResponse(
                     responseCode = "400",
                     description = "검색값, 페이지 또는 정렬 조건 오류",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
                     description = "필수 사용자 정보 누락",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "403",
                     description = "허용되지 않은 권한",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "예상하지 못한 서버 오류",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             )
     })
     @Parameters({
@@ -136,27 +146,38 @@ public interface DeliveryApiSpec {
             @ApiResponse(
                     responseCode = "400",
                     description = "잘못된 UUID 형식",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
                     description = "필수 사용자 정보 누락",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "403",
                     description = "허용되지 않은 권한",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "404",
                     description = "배송이 없거나 삭제됨 또는 조회 범위 밖",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "503",
                     description = "주문 서비스 장애로 주문자 확인 불가",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "예상하지 못한 서버 오류",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             )
     })
     @Parameters({
@@ -211,27 +232,38 @@ public interface DeliveryApiSpec {
             @ApiResponse(
                     responseCode = "400",
                     description = "잘못된 UUID 형식",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
                     description = "필수 사용자 정보 누락",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "403",
                     description = "허용되지 않은 권한",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "404",
                     description = "배송이 없거나 삭제됨 또는 조회 범위 밖",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "503",
                     description = "주문자 확인 불가 또는 주문 서비스 응답 오류",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "예상하지 못한 서버 오류",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             )
     })
     @Parameters({
@@ -285,7 +317,13 @@ public interface DeliveryApiSpec {
             @ApiResponse(responseCode = "404", description = "배송, 배송 경로 없음 또는 삭제됨", content = @Content),
             @ApiResponse(responseCode = "409", description = "배정 불가 상태 또는 다른 담당자 배정됨", content = @Content),
             @ApiResponse(responseCode = "422", description = "배정 대상 사용자 없음 또는 자격, 소속 조건 불충족", content = @Content),
-            @ApiResponse(responseCode = "503", description = "사용자 정보 검증 불가", content = @Content)
+            @ApiResponse(responseCode = "503", description = "사용자 정보 검증 불가", content = @Content),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "예상하지 못한 서버 오류",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
+            )
     })
     @Parameters({
             @Parameter(
@@ -343,27 +381,38 @@ public interface DeliveryApiSpec {
             @ApiResponse(
                     responseCode = "400",
                     description = "요청 형식, 필수값 오류 또는 허용하지 않는 요청 상태",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
                     description = "필수 사용자 정보 누락",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "403",
                     description = "MASTER 또는 해당 배송 경로 담당자가 아님",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "404",
                     description = "배송, 배송 경로 없음, 삭제됨 또는 배송 소속 불일치",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "409",
                     description = "상태 전이 불가, 담당자 미배정, 선행 배송 경로 미도착 또는 취소됨",
-                    content = @Content
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "예상하지 못한 서버 오류",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DeliveryErrorResponse.class))
             )
     })
     @Parameters({

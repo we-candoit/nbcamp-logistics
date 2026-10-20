@@ -1,37 +1,36 @@
 package logistics.delivery.presentation.util;
 
+import logistics.delivery.common.exception.DeliveryErrorCode;
+import logistics.delivery.common.exception.DeliveryException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 public final class DeliveryPageableUtils {
 
     private DeliveryPageableUtils() {}
 
+    /**
+     * 페이지 범위와 정렬 입력을 검증하고 ID를 보조 정렬로 추가한다.
+     *
+     * @param page 0부터 시작하는 페이지 번호
+     * @param size 1~100 사이의 페이지 크기
+     * @param sort 생성일 또는 수정일과 정렬 방향
+     * @return 검증된 페이징·정렬 정보
+     */
     public static Pageable create(int page, int size, String sort) {
         if (page < 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "페이지 번호는 0 이상이어야 합니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.INVALID_PAGE);
         }
 
         if (size < 1 || size > 100) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "페이지 크기는 1~100이어야 합니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.INVALID_PAGE_SIZE);
         }
 
         String[] parts = sort.split(",", -1);
 
         if (parts.length != 2) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "정렬은 필드,방향 형식이어야 합니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.INVALID_SORT);
         }
 
         String property = parts[0].trim();
@@ -39,18 +38,12 @@ public final class DeliveryPageableUtils {
 
         if (!"createdAt".equals(property)
                 && !"updatedAt".equals(property)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "정렬은 createdAt, updatedAt만 가능합니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.INVALID_SORT);
         }
 
         if (!"asc".equalsIgnoreCase(direction)
                 && !"desc".equalsIgnoreCase(direction)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "정렬 방향은 asc, desc만 가능합니다."
-            );
+            throw new DeliveryException(DeliveryErrorCode.INVALID_SORT);
         }
 
         Sort ordering = Sort.by(

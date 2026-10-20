@@ -1,5 +1,7 @@
 package logistics.delivery.domain.entity;
 
+import logistics.delivery.common.exception.DeliveryErrorCode;
+import logistics.delivery.common.exception.DeliveryException;
 import jakarta.persistence.*;
 import logistics.delivery.common.entity.BaseEntity;
 import logistics.delivery.domain.enums.DeliveryRouteStatus;
@@ -67,54 +69,55 @@ public class Delivery extends BaseEntity {
                 && Objects.equals(this.recipientPhone, recipientPhone);
     }
 
-    // 배송 취소
+    /** 출발 전 배송을 취소한다. 이미 취소된 배송은 변경하지 않는다. */
     public void cancel(){
         if(status == DeliveryStatus.CANCELLED) return;
-        if(status != DeliveryStatus.WAITING) throw new IllegalStateException("출발 전 배송만 취소할 수 있습니다.");
+        if(status != DeliveryStatus.WAITING) throw new DeliveryException(DeliveryErrorCode.DELIVERY_CANCELLATION_NOT_ALLOWED);
 
         status = DeliveryStatus.CANCELLED;
     }
 
-    // 배송 삭제를 위해 취소된 배송인지 검증
+    /** 취소된 배송인지 검증한다. 이미 삭제된 배송은 검증을 생략한다. */
     public void validateDeletable(){
         if(getDeletedAt() != null) return ;
         if(status != DeliveryStatus.CANCELLED){
-            throw new IllegalStateException("취소된 배송만 삭제할 수 있습니다.");
+            throw new DeliveryException(DeliveryErrorCode.DELIVERY_DELETION_NOT_ALLOWED);
         }
     }
 
-    // 담당자 배정 가능한 상태인지 검증
+    /** 배송 전체가 담당자 배정을 허용하는 상태인지 검증한다. */
     public void validateManagerAssignable(){
         if(status != DeliveryStatus.WAITING
                 && status != DeliveryStatus.HUB_IN_TRANSIT
                 && status != DeliveryStatus.HUB_ARRIVED){
-            throw new IllegalStateException("현재 배송 상태에서는 담당자를 배정할 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.DELIVERY_ASSIGNMENT_NOT_ALLOWED);
         }
     }
 
-    // 담당자 배정
+    /** 담당자를 배정한다. 동일 담당자는 유지하고 다른 담당자로의 변경은 거부한다. */
     public void assignManager(UUID managerId){
         validateManagerAssignable();
 
         if(managerId == null){
-            throw new IllegalArgumentException("배정할 담당자 ID가 필요합니다.");
+            throw new DeliveryException(DeliveryErrorCode.MANAGER_ID_REQUIRED);
         }
 
         if(this.managerId != null){
             if(this.managerId.equals(managerId)) return;
 
-            throw new IllegalStateException("이미 다른 담당자가 배정되어 있습니다.");
+            throw new DeliveryException(DeliveryErrorCode.MANAGER_ALREADY_ASSIGNED);
         }
 
         this.managerId = managerId;
     }
 
-    // 배송 경로 유형과 변경된 상태를 기준으로 배송 전체 상태 업데이트
+    /** 배송 경로 유형과 실제 변경 상태에 따라 허용된 배송 전체 상태로 전환한다. */
     public void updateStatusByRoute(RouteType routeType, DeliveryRouteStatus routeStatus){
         if(getDeletedAt() != null){
-            throw new IllegalStateException("삭제된 배송은 상태를 변경할 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.DELETED_DELIVERY_STATUS_CHANGE);
         }
 
+        // 내부 상태 동기화 인자 오류는 사용자 요청 오류로 오인하지 않는다.
         if (routeType == null || routeStatus == null) {
             throw new IllegalArgumentException("배송 경로 유형과 상태가 필요합니다.");
         }
@@ -158,7 +161,7 @@ public class Delivery extends BaseEntity {
         };
 
         if (!allowed) {
-            throw new IllegalStateException("현재 배송 상태에서는 해당 상태로 변경할 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.INVALID_DELIVERY_STATUS_TRANSITION);
         }
 
         status = nextStatus;

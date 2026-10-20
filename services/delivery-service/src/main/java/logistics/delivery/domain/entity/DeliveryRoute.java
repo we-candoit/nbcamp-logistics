@@ -1,5 +1,7 @@
 package logistics.delivery.domain.entity;
 
+import logistics.delivery.common.exception.DeliveryErrorCode;
+import logistics.delivery.common.exception.DeliveryException;
 import jakarta.persistence.*;
 import logistics.delivery.common.entity.BaseEntity;
 import logistics.delivery.domain.enums.DeliveryRouteStatus;
@@ -74,42 +76,42 @@ public class DeliveryRoute extends BaseEntity {
         this.type = type;
     }
 
-    // 배송 취소 시 배송 경로 취소
+    /** 출발 전 배송 경로를 취소한다. 이미 취소된 배송 경로는 변경하지 않는다. */
     public void cancel(){
         if(status == DeliveryRouteStatus.CANCELLED) return;
-        if(status != DeliveryRouteStatus.WAITING) throw new IllegalStateException("출발 전 배송 경로만 취소할 수 있습니다.");
+        if(status != DeliveryRouteStatus.WAITING) throw new DeliveryException(DeliveryErrorCode.DELIVERY_ROUTE_CANCELLATION_NOT_ALLOWED);
 
         status = DeliveryRouteStatus.CANCELLED;
     }
 
-    // 배송 경로 담당자 배정
+    /** 대기 중인 배송 경로에 담당자를 배정하고 기존 담당자 변경은 거부한다. */
     public void assignManager(UUID managerId){
         if(managerId == null){
-            throw new IllegalArgumentException("배정할 담당자 ID가 필요합니다.");
+            throw new DeliveryException(DeliveryErrorCode.MANAGER_ID_REQUIRED);
         }
 
         if(status != DeliveryRouteStatus.WAITING){
-            throw new IllegalStateException("대기 중인 배송 경로에만 담당자를 배정할 수 있습니다,");
+            throw new DeliveryException(DeliveryErrorCode.DELIVERY_ROUTE_ASSIGNMENT_NOT_ALLOWED);
         }
 
         if(this.managerId != null){
             if(this.managerId.equals(managerId)) return;
 
-            throw new IllegalStateException("이미 다른 담당자가 배정되어 있습니다.");
+            throw new DeliveryException(DeliveryErrorCode.MANAGER_ALREADY_ASSIGNED);
         }
         this.managerId = managerId;
     }
 
-    // // 배송 경로 상태 변경: 실제 변경 시 true, 동일 상태 요청 시 false 반환
+    /** 배송 경로 상태를 전환한다. 실제 변경 시 true, 동일 상태 재요청 시 false를 반환한다. */
     public boolean updateStatus(DeliveryRouteStatus nextStatus){
         if(nextStatus != DeliveryRouteStatus.IN_TRANSIT
                 && nextStatus != DeliveryRouteStatus.ARRIVED){
-            throw new IllegalArgumentException("배송 경로 상태는 IN_TRANSIT 또는 ARRIVED로 요청해야 합니다.");
+            throw new DeliveryException(DeliveryErrorCode.UNSUPPORTED_ROUTE_STATUS);
         }
 
         if(getDeletedAt() != null
             || status == DeliveryRouteStatus.CANCELLED){
-            throw new IllegalStateException("삭제되거나 취소된 배송 경로는 상태를 변경할 수 없습니다.");
+            throw new DeliveryException(DeliveryErrorCode.INACTIVE_ROUTE_STATUS_CHANGE);
         }
 
         if(status == nextStatus) return false;  // 중복 요청
@@ -117,12 +119,12 @@ public class DeliveryRoute extends BaseEntity {
         if (status == DeliveryRouteStatus.WAITING
                 && nextStatus == DeliveryRouteStatus.IN_TRANSIT){
             if(managerId == null){
-                throw new IllegalStateException("담당자가 배정된 배송 경로만 출발할 수 있습니다.");
+                throw new DeliveryException(DeliveryErrorCode.ROUTE_MANAGER_REQUIRED);
             }
         }
         else if (!(status == DeliveryRouteStatus.IN_TRANSIT
                 && nextStatus == DeliveryRouteStatus.ARRIVED)){
-            throw new IllegalStateException("허용되지 않은 배송 경로 상태 변경입니다.");
+            throw new DeliveryException(DeliveryErrorCode.INVALID_ROUTE_STATUS_TRANSITION);
         }
         status = nextStatus;
         return true;
