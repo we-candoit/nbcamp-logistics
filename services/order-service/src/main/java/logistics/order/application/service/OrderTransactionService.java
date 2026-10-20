@@ -77,6 +77,19 @@ public class OrderTransactionService {
         return order;
     }
 
+    //주문생성 실패시 보상 결과에 따라 주문상태 변경 / 보상 성공 FAILED, 보상 실패 COMPENSATION_FAILED
+    @Transactional
+    public void failCreate(UUID orderId, boolean compensated) {
+        Order order = orderRepository.findByIdAndDeletedAtIsNull(orderId).orElseThrow(
+                () -> new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+
+        if (compensated) {
+            order.failed();
+        } else {
+            order.compensationFailed();
+        }
+    }
+
     //주문삭제 실패시 보상 시나리오 / 주문과 주문상품 삭제 취소
     @Transactional
     public void compensateDeleteOrder(UUID orderId) {

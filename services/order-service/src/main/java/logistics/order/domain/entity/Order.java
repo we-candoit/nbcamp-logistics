@@ -97,4 +97,18 @@ public class Order extends BaseEntity {
             this.orderStatus = OrderStatus.CONFIRMED;
         }
     }
+
+    //주문생성 실패, 보상이 모두 성공한 경우 WAITING 상태만 FAILED로 변경
+    public void failed() {
+        if (OrderStatus.WAITING == this.orderStatus) {
+            this.orderStatus = OrderStatus.FAILED;
+        }
+    }
+
+    //주문생성 실패, 보상이 실패한 경우 WAITING 상태만 COMPENSATION_FAILED로 변경 / 수동 처리 대상
+    public void compensationFailed() {
+        if (OrderStatus.WAITING == this.orderStatus) {
+            this.orderStatus = OrderStatus.COMPENSATION_FAILED;
+        }
+    }
 }

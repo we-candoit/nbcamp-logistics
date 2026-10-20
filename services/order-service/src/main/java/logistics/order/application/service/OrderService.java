@@ -12,10 +12,12 @@ import logistics.order.presentation.dto.response.CreateOrderResponse;
 import logistics.order.presentation.dto.response.OrderDetailResponse;
 import logistics.order.presentation.dto.response.OrderListResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderService {
@@ -33,24 +35,39 @@ public class OrderService {
         orderValidator.validateOrderItem(item, request);
 
         //CompanyService API요청 회사정보 조회
-        FetchCompanyByIdResponse requesterCompany = clientService.fetchCompanyById(request.getRequesterId());
-        FetchCompanyByIdResponse supplierCompany = clientService.fetchCompanyById(request.getSupplierId());
+        FetchCompanyByIdResponse requester = clientService.fetchCompanyById(request.getRequesterId());
+        FetchCompanyByIdResponse supplier = clientService.fetchCompanyById(request.getSupplierId());
 
-        //주문엔티티 생성 / WAITING 상태
-        Order order = buildOrder(AuthContext.getUserId(), request, requesterCompany);
-        OrderItem orderItem = buildOrderItem(request, supplierCompany, item, order);
-
-        //재고감소
-        clientService.decreaseStock(supplierCompany.getHubId(), item.getItemId(), request.getQuantity());
-
-        //배송생성
-        CreateDeliveryResponse createDeliveryResponse = clientService.createDelivery(
-                CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
-        );
-
-        //주문저장
-        order.confirm(createDeliveryResponse.getDeliveryId());
+        //주문생성 / WAITING 상태
+        Order order = buildOrder(AuthContext.getUserId(), request, requester);
+        OrderItem orderItem = buildOrderItem(request, supplier, item, order);
         orderTransactionService.save(order, orderItem);
+
+        //보상 범위 판단용 / 성공한 단계만 되돌림
+        boolean stockDecreased = false;
+        UUID deliveryId = null;
+
+        try {
+            //재고감소
+            clientService.decreaseStock(supplier.getHubId(), item.getItemId(), request.getQuantity());
+            stockDecreased = true;
+
+            //배송생성
+            CreateDeliveryResponse delivery = clientService.createDelivery(
+                    CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
+            );
+            deliveryId = delivery.getDeliveryId();
+
+            //주문확정 / CONFIRMED 상태
+            order.confirm(deliveryId);
+            orderTransactionService.save(order, orderItem);
+        } catch (RuntimeException e) {
+            //주문생성 보상시나리오 / 성공한 단계를 역순으로 되돌린 뒤 결과에 따라 주문상태 변경
+            boolean compensated = compensateCreateOrder(supplier.getHubId(), item.getItemId(),
+                    request.getQuantity(), stockDecreased, deliveryId);
+            failCreateOrder(order.getId(), compensated);
+            throw e;
+        }
 
         //Slack알림
 
@@ -101,6 +118,45 @@ public class OrderService {
             //배송삭제 실패시 주문/주문상품 삭제를 되돌리는 보상시나리오
             orderTransactionService.compensateDeleteOrder(orderId);
             throw e;
+        }
+    }
+
+    //주문생성 보상 / 하나가 실패해도 나머지 보상은 계속 수행, 모두 성공하면 true
+    private boolean compensateCreateOrder(UUID hubId, UUID itemId, Long quantity,
+                                          boolean stockDecreased, UUID deliveryId) {
+        boolean compensated = true;
+
+        if (deliveryId != null) {
+            //배송은 취소된 상태에서만 삭제 가능
+            compensated &= retryOnce("배송취소", () -> clientService.cancelDelivery(deliveryId))
+                    && retryOnce("배송삭제", () -> clientService.deleteDelivery(deliveryId));
+        }
+        if (stockDecreased) {
+            compensated &= retryOnce("재고복구", () -> clientService.restoreStock(hubId, itemId, quantity));
+        }
+        return compensated;
+    }
+
+    //보상 실패시 1회 재시도
+    private boolean retryOnce(String action, Runnable compensation) {
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                compensation.run();
+                return true;
+            } catch (RuntimeException e) {
+                log.warn("주문생성 보상 실패 action={} attempt={}", action, attempt, e);
+            }
+        }
+        log.error("주문생성 보상 최종 실패 action={}", action);
+        return false;
+    }
+
+    //보상 결과에 따라 주문상태 변경 / 여기서 예외가 나면 원래 실패 원인이 가려지므로 로그만 남김
+    private void failCreateOrder(UUID orderId, boolean compensated) {
+        try {
+            orderTransactionService.failCreate(orderId, compensated);
+        } catch (RuntimeException e) {
+            log.error("주문생성 실패 상태변경 실패 orderId={} compensated={}", orderId, compensated, e);
         }
     }
 

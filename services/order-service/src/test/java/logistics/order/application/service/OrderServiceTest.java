@@ -38,6 +38,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,11 +46,16 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willAnswer;
+import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -249,7 +255,8 @@ class OrderServiceTest {
             CreateOrderResponse response = orderService.create(orderRequest());
 
             //then
-            verify(orderTransactionService).save(orderCaptor.capture(), orderItemCaptor.capture());
+            //WAITING 상태로 1번, 확정 후 1번 저장
+            verify(orderTransactionService, times(2)).save(orderCaptor.capture(), orderItemCaptor.capture());
             Order order = orderCaptor.getValue();
             OrderItem orderItem = orderItemCaptor.getValue();
 
@@ -275,7 +282,27 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 상품조회_업체조회_재고감소_배송생성_저장_순서로_실행된다() {
+        public void 주문은_WAITING으로_먼저_저장된_뒤_CONFIRMED로_저장된다() {
+            //given
+            loginAs("MASTER");
+            //같은 Order 객체가 변경되므로 저장 시점의 상태를 기록
+            List<OrderStatus> savedStatuses = new ArrayList<>();
+            willAnswer(invocation -> {
+                Order order = invocation.getArgument(0);
+                savedStatuses.add(order.getOrderStatus());
+                return null;
+            }).given(orderTransactionService).save(any(), any());
+
+            //when
+            orderService.create(orderRequest());
+
+            //then
+            assertThat(savedStatuses).containsExactly(OrderStatus.WAITING, OrderStatus.CONFIRMED);
+            verify(orderTransactionService, never()).failCreate(any(), anyBoolean());
+        }
+
+        @Test
+        public void 상품조회_업체조회_주문저장_재고감소_배송생성_확정저장_순서로_실행된다() {
             //given
             loginAs("MASTER");
             InOrder inOrder = inOrder(companyServiceClient, hubServiceClient, deliveryServiceClient, orderTransactionService);
@@ -287,6 +314,7 @@ class OrderServiceTest {
             inOrder.verify(companyServiceClient).fetchItemById(itemId);
             inOrder.verify(companyServiceClient).fetchCompanyById(requesterId);
             inOrder.verify(companyServiceClient).fetchCompanyById(supplierId);
+            inOrder.verify(orderTransactionService).save(any(), any());
             inOrder.verify(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
             inOrder.verify(deliveryServiceClient).createDelivery(any());
             inOrder.verify(orderTransactionService).save(any(), any());
@@ -442,44 +470,158 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 재고감소에_실패하면_배송생성과_저장을_하지_않는다() {
+        public void WAITING_주문저장에_실패하면_재고감소와_보상을_하지_않는다() {
             //given
             loginAs("MASTER");
             givenExternalApisSucceed();
-            willThrow(feignException()).given(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
+            RuntimeException dbError = new RuntimeException("DB 오류");
+            willThrow(dbError).given(orderTransactionService).save(any(), any());
 
             //when, then
-            assertThatThrownBy(() -> orderService.create(orderRequest()))
-                    .isInstanceOf(FeignException.class);
-            verifyNoInteractions(deliveryServiceClient, orderTransactionService);
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(dbError);
+            verifyNoInteractions(hubServiceClient, deliveryServiceClient);
+            verify(orderTransactionService, never()).failCreate(any(), anyBoolean());
+        }
+    }
+
+    @Nested
+    @DisplayName("실패 케이스 - 주문생성 보상처리")
+    class CreateCompensation {
+
+        @BeforeEach
+        void setUp() {
+            loginAs("MASTER");
+            givenExternalApisSucceed();
+            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity)).willReturn("OK");
+            given(deliveryServiceClient.cancelDelivery(deliveryId))
+                    .willReturn(new CancelDeliveryResponse(deliveryId, "CANCELLED"));
+        }
+
+        //WAITING 저장 시점에 생성된 주문ID
+        private UUID savedOrderId() {
+            ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+            verify(orderTransactionService, atLeastOnce()).save(captor.capture(), any());
+            return captor.getAllValues().get(0).getId();
         }
 
         @Test
-        public void 배송생성에_실패하면_저장을_하지_않는다() {
+        public void 재고감소에_실패하면_보상없이_FAILED로_변경하고_원래_예외를_전달한다() {
             //given
-            loginAs("MASTER");
-            givenExternalApisSucceed();
-            given(deliveryServiceClient.createDelivery(any())).willThrow(feignException());
+            FeignException stockError = feignException();
+            willThrow(stockError).given(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
 
             //when, then
-            //보상처리(재고 복구) 미구현 → 구현 후 재고복구 호출 검증 추가 필요
-            assertThatThrownBy(() -> orderService.create(orderRequest()))
-                    .isInstanceOf(FeignException.class);
-            verifyNoInteractions(orderTransactionService);
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
+            verifyNoInteractions(deliveryServiceClient);
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any());
+            UUID orderId = savedOrderId();
+            verify(orderTransactionService).failCreate(orderId, true);
         }
 
         @Test
-        public void 배송생성_응답에_배송ID가_없으면_C500_예외가_발생하고_저장하지_않는다() {
+        public void 배송생성에_실패하면_재고를_복구하고_FAILED로_변경한다() {
             //given
-            loginAs("MASTER");
-            givenExternalApisSucceed();
+            FeignException deliveryError = feignException();
+            given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            verify(deliveryServiceClient, never()).cancelDelivery(any());
+            verify(deliveryServiceClient, never()).deleteDelivery(any());
+            UUID orderId = savedOrderId();
+            verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 배송생성_응답에_배송ID가_없으면_C500_예외가_발생하고_재고만_복구한다() {
+            //given
             given(deliveryServiceClient.createDelivery(any()))
                     .willReturn(new CreateDeliveryResponse(null, null, "WAITING"));
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest()))
                     .satisfies(e -> assertErrorCode(e, ErrorCode.C500_INTERNAL_SERVER_ERROR));
-            verifyNoInteractions(orderTransactionService);
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            verify(deliveryServiceClient, never()).cancelDelivery(any());
+            UUID orderId = savedOrderId();
+            verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 확정저장에_실패하면_배송취소_배송삭제_재고복구_순서로_보상한다() {
+            //given
+            RuntimeException dbError = new RuntimeException("DB 오류");
+            willDoNothing().willThrow(dbError).given(orderTransactionService).save(any(), any());
+            InOrder inOrder = inOrder(deliveryServiceClient, hubServiceClient, orderTransactionService);
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(dbError);
+            inOrder.verify(deliveryServiceClient).cancelDelivery(deliveryId);
+            inOrder.verify(deliveryServiceClient).deleteDelivery(deliveryId);
+            inOrder.verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            UUID orderId = savedOrderId();
+            inOrder.verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 보상이_한번_실패해도_재시도에_성공하면_FAILED로_변경한다() {
+            //given
+            given(deliveryServiceClient.createDelivery(any())).willThrow(feignException());
+            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity))
+                    .willThrow(feignException())
+                    .willReturn("OK");
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isInstanceOf(FeignException.class);
+            verify(hubServiceClient, times(2)).restoreStock(supplierHubId, itemId, quantity);
+            UUID orderId = savedOrderId();
+            verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 재시도까지_실패하면_COMPENSATION_FAILED로_변경하고_원래_예외를_전달한다() {
+            //given
+            FeignException deliveryError = feignException();
+            given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
+            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity))
+                    .willThrow(new RuntimeException("재고복구 실패"));
+
+            //when, then
+            //보상 예외가 아닌 원래 실패 원인이 전달되어야 함
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
+            verify(hubServiceClient, times(2)).restoreStock(supplierHubId, itemId, quantity);
+            UUID orderId = savedOrderId();
+            verify(orderTransactionService).failCreate(orderId, false);
+        }
+
+        @Test
+        public void 배송취소가_최종_실패해도_재고복구는_수행하고_COMPENSATION_FAILED로_변경한다() {
+            //given
+            willDoNothing().willThrow(new RuntimeException("DB 오류"))
+                    .given(orderTransactionService).save(any(), any());
+            given(deliveryServiceClient.cancelDelivery(deliveryId)).willThrow(feignException());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isInstanceOf(RuntimeException.class);
+            verify(deliveryServiceClient, times(2)).cancelDelivery(deliveryId);
+            //취소되지 않은 배송은 삭제할 수 없으므로 삭제는 시도하지 않음
+            verify(deliveryServiceClient, never()).deleteDelivery(any());
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            UUID orderId = savedOrderId();
+            verify(orderTransactionService).failCreate(orderId, false);
+        }
+
+        @Test
+        public void 주문상태_변경에_실패해도_원래_예외를_전달한다() {
+            //given
+            FeignException deliveryError = feignException();
+            given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
+            willThrow(new RuntimeException("DB 오류")).given(orderTransactionService).failCreate(any(), anyBoolean());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
         }
     }
 
