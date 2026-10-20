@@ -2,11 +2,13 @@ package logistics.company.presentation.auth;
 
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
+import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 
 import java.util.List;
 
+@Component
 public class FeignHeaderInterceptor implements RequestInterceptor {
 
     private static final List<String> HEADERS = List.of(

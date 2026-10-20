@@ -28,7 +28,7 @@ public class CompanyController {
 
     @PostMapping("/api/companies")
     public ResponseEntity<CompanyResponse> createCompany(@RequestAttribute(ROLE_HEADER) String role,
-                                                 @Valid @RequestBody CompanyCreateRequest request) {
+                                                         @Valid @RequestBody CompanyCreateRequest request) {
         CompanyResponse response = companyService.createCompany(role, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
