@@ -1,15 +1,12 @@
 package logistics.order.application.validator;
 
 import logistics.order.common.AuthContext;
-import logistics.order.infrastructure.client.UserServiceClient;
 import logistics.order.infrastructure.client.dto.CancelDeliveryResponse;
 import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
-import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
 import logistics.order.infrastructure.client.enums.DeliveryStatus;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.common.exception.CustomException;
 import logistics.order.common.exception.ErrorCode;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -17,17 +14,13 @@ import java.util.*;
 import static logistics.order.application.validator.CommonValidator.validateEqual;
 import static logistics.order.application.validator.CommonValidator.validateNotEqual;
 
+//외부 서비스 조회는 하지 않고, 전달받은 값으로 검증만 수행 (조회는 OrderService → ClientService)
 @Component
-@RequiredArgsConstructor
 public class OrderValidator {
-    
-    private final UserServiceClient userServiceClient;
 
-    //유효한 주문인가?
-    public void validateOrder(CreateOrderRequest request) {
-        //요청업체와 공급업체가 다른가?
-        validateNotEqual(request.getRequesterId(), request.getSupplierId(), ErrorCode.C400_SAME_COMPANY);
-        validateUser(request.getRequesterId());
+    //요청업체와 공급업체가 다른가?
+    public void validateNotSameCompany(UUID requesterId, UUID supplierId) {
+        validateNotEqual(requesterId, supplierId, ErrorCode.C400_SAME_COMPANY);
     }
 
     //유효한 주문상품인가?
@@ -40,11 +33,9 @@ public class OrderValidator {
     }
 
     //주문한 유저가 해당 요청업체의 소속인가?
-    private void validateUser(UUID requesterId) {
+    public void validateUserBelongsToRequester(UUID userCompanyId, UUID requesterId) {
         if (!AuthContext.isMaster()) {
-            FetchUserByIdResponse user = userServiceClient.fetchUserById(AuthContext.getUserId());
-
-            validateEqual(user.getCompanyId(), requesterId, ErrorCode.C403_FORBIDDEN_REQUESTER);
+            validateEqual(userCompanyId, requesterId, ErrorCode.C403_FORBIDDEN_REQUESTER);
         }
     }
 

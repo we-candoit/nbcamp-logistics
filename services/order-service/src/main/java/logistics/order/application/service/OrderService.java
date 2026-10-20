@@ -1,5 +1,7 @@
 package logistics.order.application.service;
 
+import logistics.order.application.compensation.OrderCompensator;
+import logistics.order.application.compensation.CreateOrderProgress;
 import logistics.order.application.validator.OrderValidator;
 import logistics.order.common.AuthContext;
 import logistics.order.domain.entity.Order;
@@ -23,33 +25,34 @@ public class OrderService {
     private final OrderValidator orderValidator;
     private final OrderTransactionService orderTransactionService;
     private final ClientService clientService;
+    private final OrderCompensator orderCompensator;
 
     //주문생성
     public CreateOrderResponse create(CreateOrderRequest request) {
-        //올바른 요청 및 상품 인지 검증
-        orderValidator.validateOrder(request);
-        FetchItemByIdResponse item = clientService.fetchItemById(request.getItemId());
-        orderValidator.validateOrderItem(item, request);
 
-        //CompanyService API요청 회사정보 조회
-        FetchCompanyByIdResponse requesterCompany = clientService.fetchCompanyById(request.getRequesterId());
-        FetchCompanyByIdResponse supplierCompany = clientService.fetchCompanyById(request.getSupplierId());
+        FetchUserByIdResponse user = clientService.fetchUserById(AuthContext.getUserId());
+        OrderItem orderItem = prepareCreateOrder(request, user);
+        Order order = orderItem.getOrder();
+        CreateOrderProgress progress = CreateOrderProgress.start(orderItem);
 
-        //주문엔티티 생성 / WAITING 상태
-        Order order = buildOrder(AuthContext.getUserId(), request, requesterCompany);
-        OrderItem orderItem = buildOrderItem(request, supplierCompany, item, order);
+        try {
+            //재고감소
+            clientService.decreaseStock(orderItem.getDepartureHubId(), orderItem.getItemId(), orderItem.getQuantity());
+            progress.markStockDecreased();
 
-        //재고감소
-        clientService.decreaseStock(supplierCompany.getHubId(), item.getItemId(), request.getQuantity());
+            //배송생성
+            CreateDeliveryResponse delivery = clientService.createDelivery(
+                    CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
+            );
+            progress.markDeliveryCreated(delivery.getDeliveryId());
 
-        //배송생성
-        CreateDeliveryResponse createDeliveryResponse = clientService.createDelivery(
-                CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
-        );
-
-        //주문저장
-        order.confirm(createDeliveryResponse.getDeliveryId());
-        orderTransactionService.save(order, orderItem);
+            //주문확정 / CONFIRMED 상태
+            order.confirm(delivery.getDeliveryId());
+            orderTransactionService.save(order, orderItem);
+        } catch (RuntimeException e) {
+            orderCompensator.compensateCreate(progress);
+            throw e;
+        }
 
         //Slack알림
 
@@ -83,14 +86,14 @@ public class OrderService {
             clientService.cancelDelivery(order.getDeliveryId());
         } catch (RuntimeException e) {
             //배송취소 실패시 주문상태 CONFIRMED로 복구하는 보상시나리오
-            orderTransactionService.compensateCancelOrder(orderId);
+            orderCompensator.compensateCancel(orderId);
             throw e;
         }
 
         return CancelOrderResponse.from(order);
     }
 
-    //주문ID로 주문삭제 / 취소된(CANCELLED) 주문만 가능, 배송삭제에 실패하면 주문삭제 복구
+    //주문ID로 주문삭제, 취소된(CANCELLED) 주문만 가능
     public void deleteOrderById(UUID orderId) {
         Order order = orderTransactionService.delete(orderId, AuthContext.getUserId());
 
@@ -98,31 +101,43 @@ public class OrderService {
             clientService.deleteDelivery(order.getDeliveryId());
         } catch (RuntimeException e) {
             //배송삭제 실패시 주문/주문상품 삭제를 되돌리는 보상시나리오
-            orderTransactionService.compensateDeleteOrder(orderId);
+            orderCompensator.compensateDelete(orderId);
             throw e;
         }
     }
 
-    private OrderItem buildOrderItem(CreateOrderRequest request, FetchCompanyByIdResponse supplierCompany,
-                                      FetchItemByIdResponse item, Order order) {
-        return new OrderItem(
-            item.getItemId(),
-            item.getName(),
-            item.getPrice(),
-            request.getQuantity(),
-            supplierCompany.getHubId(),
-            supplierCompany.getCompanyId(),
-            order
-        );
-    }
-    private Order buildOrder(UUID orderUserId, CreateOrderRequest request, FetchCompanyByIdResponse requesterCompany) {
-        return new Order(
-                orderUserId,
-                request.getRequesterId(),
-                requesterCompany.getHubId(),
-                requesterCompany.getAddress(),
-                request.getRequestNote()
-        );
-    }
+    private OrderItem prepareCreateOrder(CreateOrderRequest request, FetchUserByIdResponse user) {
+        orderValidator.validateNotSameCompany(request.getRequesterId(), request.getSupplierId());
+        orderValidator.validateUserBelongsToRequester(user.getCompanyId(), request.getRequesterId());
+        FetchItemByIdResponse item = clientService.fetchItemById(request.getItemId());
+        orderValidator.validateOrderItem(item, request);
 
+        //CompanyService API요청 회사정보 조회
+        FetchCompanyByIdResponse requester = clientService.fetchCompanyById(request.getRequesterId());
+        FetchCompanyByIdResponse supplier = clientService.fetchCompanyById(request.getSupplierId());
+
+        //주문 생성
+        Order order = Order.builder()
+                .orderUserId(AuthContext.getUserId())
+                .requesterId(request.getRequesterId())
+                .destinationHubId(requester.getHubId())
+                .address(requester.getAddress())
+                .requestNote(request.getRequestNote())
+                .build();
+
+        //주문상품 생성
+        OrderItem orderItem = OrderItem.builder()
+                .itemId(item.getItemId())
+                .itemName(item.getName())
+                .price(item.getPrice())
+                .quantity(request.getQuantity())
+                .departureHubId(supplier.getHubId())
+                .supplierId(supplier.getCompanyId())
+                .order(order)
+                .build();
+
+        orderTransactionService.save(order, orderItem);
+
+        return orderItem;
+    }
 }

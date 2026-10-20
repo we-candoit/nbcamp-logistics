@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import logistics.order.common.entity.BaseEntity;
 import logistics.order.common.exception.CustomException;
 import logistics.order.common.exception.ErrorCode;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -40,6 +41,7 @@ public class OrderItem extends BaseEntity {
     @JoinColumn(name = "order_id", nullable = false, unique = true)
     private Order order;
 
+    @Builder
     public OrderItem(UUID itemId, String itemName, Long price, Long quantity,
                      UUID departureHubId, UUID supplierId, Order order) {
         this.itemId = itemId;
