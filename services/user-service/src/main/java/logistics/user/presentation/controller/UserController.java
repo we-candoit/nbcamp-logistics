@@ -54,6 +54,7 @@ public class UserController {
         return ResponseEntity.ok(apiResponse);
     }
 
+    // 회원가입 후 업체 소속 신청
     @PatchMapping("/me/affiliation")
     public ResponseEntity<ApiResponse<UserDetailResponse>> applyCompany(
             @Valid @RequestBody CompanyApplyRequest request,
