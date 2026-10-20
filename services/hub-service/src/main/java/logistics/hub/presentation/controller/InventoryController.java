@@ -1,11 +1,14 @@
 package logistics.hub.presentation.controller;
 
 import jakarta.validation.Valid;
+import logistics.hub.application.service.InventoryRegistrationService;
 import logistics.hub.application.service.InventoryRestockService;
 import logistics.hub.application.service.InventoryService;
+import logistics.hub.presentation.dto.request.InventoryCreateRequest;
 import logistics.hub.presentation.dto.request.InventoryRestockRequest;
 import logistics.hub.presentation.dto.response.InventoryResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +21,7 @@ public class InventoryController {
 
     private final InventoryService inventoryService;
     private final InventoryRestockService inventoryRestockService;
+    private final InventoryRegistrationService inventoryRegistrationService;
 
     @GetMapping
     public List<InventoryResponse> getInventories(@PathVariable("hubId") UUID hubId) {
@@ -29,23 +33,36 @@ public class InventoryController {
         return inventoryService.getInventory(hubId, productId);
     }
 
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public InventoryResponse createInventory(
+            @PathVariable("hubId") UUID hubId,
+            @Valid @RequestBody InventoryCreateRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) UUID userId,
+            @RequestHeader(value = "X-Role-Name", required = false) String role
+    ) {
+        return inventoryRegistrationService.createInventory(
+                hubId,
+                request,
+                userId,
+                role
+        );
+    }
+
     @PatchMapping("/{itemId}")
     public InventoryResponse restock(
             @PathVariable("hubId") UUID hubId,
             @PathVariable("itemId") UUID productId,
             @Valid @RequestBody InventoryRestockRequest request,
-            @RequestAttribute(value = "userId", required = false) UUID userId,
-            @RequestAttribute(value = "role", required = false) String role,
-            @RequestHeader(value = "Authorization", required = false)
-            String authorization
+            @RequestHeader(value = "X-User-Id", required = false) UUID userId,
+            @RequestHeader(value = "X-Role-Name", required = false) String role
     ) {
         return inventoryRestockService.restock(
                 hubId,
                 productId,
                 request,
                 userId,
-                role,
-                authorization
+                role
         );
     }
 }

@@ -11,7 +11,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
 
-
 @Service
 @RequiredArgsConstructor
 public class InventoryRegistrationService {
@@ -23,8 +22,7 @@ public class InventoryRegistrationService {
             UUID hubId,
             InventoryCreateRequest request,
             UUID userId,
-            String role,
-            String authorization
+            String role
     ) {
         if (userId == null) {
             throw new ResponseStatusException(
@@ -44,7 +42,8 @@ public class InventoryRegistrationService {
                 hubId,
                 request.getCompanyId(),
                 request.getProductId(),
-                authorization
+                userId,
+                role
         );
 
         try {
@@ -62,23 +61,19 @@ public class InventoryRegistrationService {
                         e
                 );
             }
-
             throw e;
         }
     }
 
     private boolean isDuplicateInventory(Throwable exception) {
         Throwable cause = exception;
-
         while (cause != null) {
             if (cause instanceof ConstraintViolationException violation) {
                 return "uk_hub_items_hub_product"
                         .equals(violation.getConstraintName());
             }
-
             cause = cause.getCause();
         }
-
         return false;
     }
 }
