@@ -9,13 +9,10 @@ import java.util.UUID;
 @Getter
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class UserAffiliationUpdateRequest {
-    private static final String CONFIRMED = "CONFIRMED";
-
     private UUID companyId;
-    private String affiliationStatus;
     private String affiliationName;
 
     public static UserAffiliationUpdateRequest confirm(UUID companyId, String companyName) {
-        return new UserAffiliationUpdateRequest(companyId, CONFIRMED, companyName);
+        return new UserAffiliationUpdateRequest(companyId, companyName);
     }
 }

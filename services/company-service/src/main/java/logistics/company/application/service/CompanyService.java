@@ -145,6 +145,7 @@ public class CompanyService {
         return requested != null && !Objects.equals(requested, current);
     }
 
+    // 내부 API: 업체 복수 조회
     @Transactional(readOnly = true)
     public CompanyBulkResponse getCompanies(List<UUID> ids) {
         // 1. ids 중복 체크

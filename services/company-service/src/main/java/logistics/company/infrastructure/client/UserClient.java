@@ -16,7 +16,7 @@ public interface UserClient {
     @GetMapping("/api/users/{userId}")
     UserApiResponse<UserResponse> getUser(@PathVariable("userId") UUID userId);
 
-    @PatchMapping("/api/users/{userId}")
+    @PatchMapping("/internal/users/{userId}/affiliation")
     void updateAffiliation(@PathVariable("userId") UUID userId,
                            @RequestBody UserAffiliationUpdateRequest request);
 }

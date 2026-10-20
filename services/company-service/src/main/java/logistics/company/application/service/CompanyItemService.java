@@ -56,6 +56,7 @@ public class CompanyItemService {
         return CompanyItemResponse.from(saved);
     }
 
+    @Transactional(readOnly = true)
     public CompanyItemResponse getItem(UUID itemId) {
         CompanyItem item = companyItemRepository.findById(itemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));

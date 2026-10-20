@@ -102,7 +102,6 @@ class CompanyServiceTest {
                 ArgumentCaptor.forClass(UserAffiliationUpdateRequest.class);
         then(userClient).should().updateAffiliation(eq(MANAGER_ID), captor.capture());
         assertThat(captor.getValue().getCompanyId()).isEqualTo(COMPANY_ID);
-        assertThat(captor.getValue().getAffiliationStatus()).isEqualTo("CONFIRMED");
         assertThat(captor.getValue().getAffiliationName()).isEqualTo(NAME);
     }
 
