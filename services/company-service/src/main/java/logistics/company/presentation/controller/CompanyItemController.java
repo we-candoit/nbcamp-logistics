@@ -61,4 +61,14 @@ public class CompanyItemController {
                                                          @Valid @RequestBody CompanyItemUpdateRequest request) {
         return ResponseEntity.ok(companyItemService.updateItem(itemId, userId, role, request));
     }
+
+    // 상품 삭제
+    @DeleteMapping("/api/items/{itemId}")
+    public ResponseEntity<?> deleteItem(@PathVariable("itemId") UUID itemId,
+                                                          @RequestAttribute(USER_ID_HEADER) UUID userId,
+                                                          @RequestAttribute(ROLE_HEADER) String role) {
+
+        companyItemService.deleteItem(itemId, userId, role);
+        return ResponseEntity.noContent().build();
+    }
 }

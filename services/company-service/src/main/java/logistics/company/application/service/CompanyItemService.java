@@ -161,4 +161,19 @@ public class CompanyItemService {
 
         return CompanyItemBulkResponse.of(responses, notFoundIds);
     }
+
+    @Transactional
+    public void deleteItem(UUID itemId, UUID userId, String role) {
+        // 1. 삭제할 제품 존재 확인
+        CompanyItem companyItem = companyItemRepository.findById(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+
+        // 2. 권한 체크 : MASTER 또는 해당 업체 관리자인지 확인
+        if (!MASTER.equals(role) && !companyItem.isManagedBy(userId)) { // MASTER or 해당 업체 관리자가 아닌 경우
+            throw new BusinessException(ErrorCode.ITEM_FORBIDDEN);
+        }
+
+        // 3. 없으면 논리 삭제(soft delete: deleted_at, deleted_by 기록)
+        companyItem.delete(userId);
+    }
 }
