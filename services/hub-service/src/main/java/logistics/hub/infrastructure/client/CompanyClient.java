@@ -15,14 +15,14 @@ public interface CompanyClient {
     @GetMapping("/api/companies/{companyId}")
     CompanyResponse getCompany(
             @PathVariable("companyId") UUID companyId,
-            //권한 설정 필요 - 검증된 사용자의 Bearer 토큰을 Company 서비스에 전달
-            @RequestHeader("Authorization") String authorization
+            @RequestHeader("X-User-Id") UUID userId,
+            @RequestHeader("X-Role-Name") String role
     );
 
-    @GetMapping("/api/companies/{companyId}/item/{itemId}")
+    @GetMapping("/api/items/{itemId}")
     ProductResponse getProduct(
-            @PathVariable("companyId") UUID companyId,
             @PathVariable("itemId") UUID productId,
-            @RequestHeader("Authorization") String authorization
+            @RequestHeader("X-User-Id") UUID userId,
+            @RequestHeader("X-Role-Name") String role
     );
 }

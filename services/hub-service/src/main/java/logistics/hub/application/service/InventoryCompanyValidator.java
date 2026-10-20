@@ -5,12 +5,14 @@ import logistics.hub.infrastructure.client.CompanyClient;
 import logistics.hub.infrastructure.client.dto.CompanyResponse;
 import logistics.hub.infrastructure.client.dto.ProductResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class InventoryCompanyValidator {
@@ -21,29 +23,30 @@ public class InventoryCompanyValidator {
             UUID hubId,
             UUID companyId,
             UUID productId,
-            String authorization
+            UUID userId,
+            String role
     ) {
         CompanyResponse company;
         ProductResponse product;
 
         try {
-            company = companyClient.getCompany(
-                    companyId,
-                    authorization
-            );
-
-            product = companyClient.getProduct(
-                    companyId,
-                    productId,
-                    authorization
-            );
+            company = companyClient.getCompany(companyId, userId, role);
+            product = companyClient.getProduct(productId, userId, role);
         } catch (FeignException.NotFound e) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "업체 또는 상품을 찾을 수 없습니다.",
                     e
             );
+        } catch (FeignException.Unauthorized | FeignException.Forbidden e) {
+            log.error("Company Service 인증/권한 연동 실패: status={}", e.status(), e);
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "업체 서비스 간 인증/권한 확인에 실패했습니다.",
+                    e
+            );
         } catch (FeignException e) {
+            log.error("Company Service 호출 실패: status={}", e.status(), e);
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "업체 서비스에서 정보를 확인할 수 없습니다.",
@@ -52,10 +55,10 @@ public class InventoryCompanyValidator {
         }
 
         if (company == null
-                || company.getId() == null
+                || company.getCompanyId() == null
                 || company.getHubId() == null
                 || product == null
-                || product.getId() == null
+                || product.getItemId() == null
                 || product.getCompanyId() == null) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
@@ -63,8 +66,8 @@ public class InventoryCompanyValidator {
             );
         }
 
-        if (!companyId.equals(company.getId())
-                || !productId.equals(product.getId())) {
+        if (!companyId.equals(company.getCompanyId())
+                || !productId.equals(product.getItemId())) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "요청한 업체 또는 상품과 응답 정보가 다릅니다."
