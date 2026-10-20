@@ -39,6 +39,12 @@ public abstract class BaseEntity {
     @Column(length = 100)
     private String deletedBy;
 
+    protected void initAuditor(String auditor) {
+        this.createdBy = auditor;
+        this.updatedBy = auditor;
+    }
+
+    // Soft Delete는 삭제가 아닌 update이므로 JPA가 인지하지 못한다. 직접 주입해줘야 한다.
     public void softDelete(String deletedBy) {
         this.deletedAt = LocalDateTime.now();
         this.deletedBy = deletedBy;
