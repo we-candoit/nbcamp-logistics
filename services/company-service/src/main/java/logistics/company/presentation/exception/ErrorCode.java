@@ -32,9 +32,6 @@ public enum ErrorCode {
     MANAGER_NOT_COMPANY_USER(400, "업체 소속 사용자가 아닙니다."),
     MANAGER_ALREADY_CONFIRMED(409, "이미 소속이 확정된 사용자입니다."),
 
-    // 허브
-    HUB_NOT_FOUND(404, "존재하지 않는 허브입니다."),
-
     // 상품
     ITEM_NAME_ALREADY_EXISTS(409, "같은 업체에 이미 존재하는 상품명입니다."),
     ITEM_FORBIDDEN(403, "상품 관리 권한이 없습니다."),
