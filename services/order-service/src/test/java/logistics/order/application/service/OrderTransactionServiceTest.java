@@ -176,24 +176,52 @@ class OrderTransactionServiceTest {
 
             assertThat(orderStatus).isEqualTo("CONFIRMED");
         }
+
+        @Test
+        public void 배송생성_전_WAITING_주문은_배송ID_없이_저장된다() {
+            //given
+            Order order = new Order(userId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
+
+            //when
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+
+            //then
+            Order saved = orderRepository.findById(order.getId()).orElseThrow();
+            assertThat(saved.getStatus()).isEqualTo(OrderStatus.WAITING);
+            assertThat(saved.getDeliveryId()).isNull();
+        }
+
+        @Test
+        public void WAITING으로_저장한_주문을_확정하여_다시_저장하면_배송ID와_상태가_반영된다() {
+            //given
+            //주문생성 흐름과 동일하게 WAITING 저장 후 트랜잭션이 끝난(준영속) 객체를 확정
+            Order order = new Order(userId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
+            OrderItem orderItem = orderItem(order);
+            orderTransactionService.save(order, orderItem);
+            em.flush();
+            em.clear();
+
+            UUID deliveryId = UUID.randomUUID();
+            order.confirm(deliveryId);
+
+            //when
+            orderTransactionService.save(order, orderItem);
+            em.flush();
+            em.clear();
+
+            //then
+            Order saved = orderRepository.findById(order.getId()).orElseThrow();
+            assertThat(saved.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            assertThat(saved.getDeliveryId()).isEqualTo(deliveryId);
+            assertThat(orderItemRepository.count()).isEqualTo(1);
+        }
     }
 
     @Nested
     @DisplayName("실패 케이스")
     class Failure {
-
-        @Test
-        public void 확정되지_않은_주문은_배송ID가_없어_저장에_실패한다() {
-            //given
-            Order order = new Order(userId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", null);
-
-            //when, then
-            //deliveryId nullable = false
-            assertThatThrownBy(() -> {
-                orderTransactionService.save(order, orderItem(order));
-                em.flush();
-            }).rootCause().hasMessageContaining("NULL not allowed").hasMessageContaining("DELIVERY_ID");
-        }
 
         @Test
         public void 요청에_userId가_없으면_생성자_정보가_없어_저장에_실패한다() {

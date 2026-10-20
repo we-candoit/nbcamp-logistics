@@ -12,6 +12,7 @@ import logistics.order.domain.enums.OrderStatus;
 import logistics.order.infrastructure.client.CompanyServiceClient;
 import logistics.order.infrastructure.client.DeliveryServiceClient;
 import logistics.order.infrastructure.client.HubServiceClient;
+import logistics.order.infrastructure.client.SlackClient;
 import logistics.order.infrastructure.client.UserServiceClient;
 import logistics.order.infrastructure.client.dto.CancelDeliveryResponse;
 import logistics.order.infrastructure.client.dto.CreateDeliveryRequest;
@@ -19,6 +20,7 @@ import logistics.order.infrastructure.client.dto.CreateDeliveryResponse;
 import logistics.order.infrastructure.client.dto.FetchCompanyByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
+import logistics.order.infrastructure.client.dto.UserApiResponse;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
@@ -67,13 +69,14 @@ class OrderServiceTest {
     private final HubServiceClient hubServiceClient = mock(HubServiceClient.class);
     private final DeliveryServiceClient deliveryServiceClient = mock(DeliveryServiceClient.class);
     private final UserServiceClient userServiceClient = mock(UserServiceClient.class);
+    private final SlackClient slackClient = mock(SlackClient.class);
     private final OrderTransactionService orderTransactionService = mock(OrderTransactionService.class);
 
     //검증 로직은 실제 객체 사용 (목데이터로 실제 검증 흐름까지 확인)
     private final OrderValidator orderValidator = new OrderValidator();
 
     private final ClientService clientService = new ClientService(
-            companyServiceClient, hubServiceClient, deliveryServiceClient, userServiceClient, orderValidator);
+            companyServiceClient, hubServiceClient, deliveryServiceClient, userServiceClient, slackClient, orderValidator);
 
     //보상 로직도 실제 객체 사용 (보상 호출 흐름까지 확인)
     private final OrderCompensator orderCompensator =
@@ -133,10 +136,15 @@ class OrderServiceTest {
                 LocalDateTime.now(), LocalDateTime.now());
     }
 
+    //유저 서비스는 응답을 data로 감싸서 반환
+    private UserApiResponse<FetchUserByIdResponse> userResponse(UUID companyId) {
+        return new UserApiResponse<>(true, null, new FetchUserByIdResponse(companyId));
+    }
+
     //외부 API가 모두 정상 응답하는 상황
     private void givenExternalApisSucceed() {
         //MASTER도 유저 레코드가 있어 항상 조회 (이후 Slack ID 사용 예정)
-        given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(requesterId));
+        given(userServiceClient.fetchUserById(userId)).willReturn(userResponse(requesterId));
         given(companyServiceClient.fetchItemById(itemId)).willReturn(itemResponse());
         given(companyServiceClient.fetchCompanyById(requesterId))
                 .willReturn(companyResponse(requesterId, requesterHubId, "요청업체", "서울시 강남구 테헤란로 1"));
@@ -193,7 +201,7 @@ class OrderServiceTest {
         public void MASTER도_유저를_조회하고_소속업체가_달라도_주문이_생성된다() {
             //given
             loginAs("MASTER");
-            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(UUID.randomUUID()));
+            given(userServiceClient.fetchUserById(userId)).willReturn(userResponse(UUID.randomUUID()));
 
             //when
             CreateOrderResponse response = orderService.create(orderRequest());
@@ -207,7 +215,7 @@ class OrderServiceTest {
         public void 요청업체_소속_유저가_주문하면_유저조회_후_주문이_생성된다() {
             //given
             loginAs("COMPANY_MANAGER");
-            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(requesterId));
+            given(userServiceClient.fetchUserById(userId)).willReturn(userResponse(requesterId));
 
             //when
             CreateOrderResponse response = orderService.create(orderRequest());
@@ -325,6 +333,20 @@ class OrderServiceTest {
             inOrder.verify(deliveryServiceClient).createDelivery(any());
             inOrder.verify(orderTransactionService).save(any(), any());
         }
+
+        @Test
+        public void 슬랙_DM_전송에_실패해도_주문은_정상_생성된다() {
+            //given
+            loginAs("MASTER");
+            willThrow(new RuntimeException("slack error")).given(slackClient).sendDm(any(), any());
+
+            //when
+            CreateOrderResponse response = orderService.create(orderRequest());
+
+            //then
+            assertThat(response.getDeliveryId()).isEqualTo(deliveryId);
+            verify(slackClient).sendDm(any(), any());
+        }
     }
 
     @Nested
@@ -335,6 +357,7 @@ class OrderServiceTest {
         public void 요청업체와_공급업체가_같으면_외부호출_없이_실패한다() {
             //given
             loginAs("MASTER");
+            given(userServiceClient.fetchUserById(userId)).willReturn(userResponse(requesterId));
             CreateOrderRequest request = new CreateOrderRequest(requesterId, requesterId, itemId, price, quantity,
                     null, "홍길동", "010-1234-5678");
 
@@ -348,7 +371,7 @@ class OrderServiceTest {
         public void 유저를_먼저_조회한_뒤_같은업체_검증에_실패한다() {
             //given
             loginAs("COMPANY_MANAGER");
-            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(requesterId));
+            given(userServiceClient.fetchUserById(userId)).willReturn(userResponse(requesterId));
             CreateOrderRequest request = new CreateOrderRequest(requesterId, requesterId, itemId, price, quantity,
                     null, "홍길동", "010-1234-5678");
 
@@ -363,11 +386,23 @@ class OrderServiceTest {
         public void 유저의_소속업체가_null이면_상품조회_전에_실패한다() {
             //given
             loginAs("COMPANY_MANAGER");
-            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(null));
+            given(userServiceClient.fetchUserById(userId)).willReturn(userResponse(null));
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest()))
                     .satisfies(e -> assertErrorCode(e, ErrorCode.C403_FORBIDDEN_REQUESTER));
+            verifyNoInteractions(companyServiceClient, hubServiceClient, deliveryServiceClient, orderTransactionService);
+        }
+
+        @Test
+        public void 유저조회_응답에_data가_없으면_C500_예외가_발생하고_상품조회_전에_실패한다() {
+            //given
+            loginAs("COMPANY_MANAGER");
+            given(userServiceClient.fetchUserById(userId)).willReturn(new UserApiResponse<>(true, null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest()))
+                    .satisfies(e -> assertErrorCode(e, ErrorCode.C500_INTERNAL_SERVER_ERROR));
             verifyNoInteractions(companyServiceClient, hubServiceClient, deliveryServiceClient, orderTransactionService);
         }
 
@@ -400,7 +435,7 @@ class OrderServiceTest {
         public void 소문자_master는_MASTER로_인정되지_않아_소속검증을_거친다() {
             //given
             loginAs("master");
-            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(UUID.randomUUID()));
+            given(userServiceClient.fetchUserById(userId)).willReturn(userResponse(UUID.randomUUID()));
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest()))
@@ -412,7 +447,7 @@ class OrderServiceTest {
         public void 다른업체_소속_유저면_상품조회_전에_실패한다() {
             //given
             loginAs("COMPANY_MANAGER");
-            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(UUID.randomUUID()));
+            given(userServiceClient.fetchUserById(userId)).willReturn(userResponse(UUID.randomUUID()));
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest()))
@@ -524,6 +559,18 @@ class OrderServiceTest {
             verify(hubServiceClient, never()).restoreStock(any(), any(), any());
             UUID orderId = savedOrderId();
             verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 슬랙_DM_전송에_실패해도_원래_예외를_전달한다() {
+            //given
+            FeignException stockError = feignException();
+            willThrow(stockError).given(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
+            willThrow(new RuntimeException("slack error")).given(slackClient).sendDm(any(), any());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
+            verify(slackClient).sendDm(any(), any());
         }
 
         @Test
