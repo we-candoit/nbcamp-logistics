@@ -1,6 +1,5 @@
 package logistics.company.application.service;
 
-import jakarta.validation.Valid;
 import logistics.company.domain.entity.Company;
 import logistics.company.infrastructure.client.HubClient;
 import logistics.company.infrastructure.client.UserClient;
@@ -11,6 +10,9 @@ import logistics.company.presentation.dto.request.company.CompanyCreateRequest;
 import logistics.company.presentation.dto.request.company.CompanySearchCondition;
 import logistics.company.presentation.dto.request.company.CompanyUpdateRequest;
 import logistics.company.presentation.dto.response.CompanyResponse;
+import logistics.company.presentation.dto.response.internal.CompanyBulkResponse;
+import logistics.company.presentation.dto.response.internal.CompanyInternalResponse;
+import logistics.company.presentation.dto.response.internal.CompanyItemBulkResponse;
 import logistics.company.presentation.exception.BusinessException;
 import logistics.company.presentation.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -19,8 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +36,7 @@ public class CompanyService {
     private static final String PENDING = "PENDING";
 
     @Transactional
-    public CompanyResponse createCompany(String role, @Valid CompanyCreateRequest request) {
+    public CompanyResponse createCompany(String role, CompanyCreateRequest request) {
         // 1. 권한 체크: MASTER만 업체 등록 가능
         if(!MASTER.equals(role)) {
             throw new BusinessException(ErrorCode.COMPANY_CREATE_FORBIDDEN);
@@ -94,7 +95,7 @@ public class CompanyService {
     }
 
     @Transactional
-    public CompanyResponse updateCompany(UUID companyId, UUID userId, String role, @Valid CompanyUpdateRequest request) {
+    public CompanyResponse updateCompany(UUID companyId, UUID userId, String role, CompanyUpdateRequest request) {
         // 1. 업체 조회 (없거나 삭제됐으면 404)
         Company company = companyRepository.findById(companyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
@@ -141,5 +142,36 @@ public class CompanyService {
     private boolean isChanged(Object requested, Object current) {
         // 요청 값이 있고, 기존 값과 다르면 변경 대상
         return requested != null && !Objects.equals(requested, current);
+    }
+
+    @Transactional(readOnly = true)
+    public CompanyBulkResponse getCompanies(List<UUID> ids) {
+        // 1. ids 중복 체크
+        List<UUID> distinctIds = ids.stream().distinct().toList();
+
+        // 2. ids별 업체 조회
+        List<Company> foundCompanies = companyRepository.findAllById(distinctIds);
+
+        // 3. map 형태로 정리
+        Map<UUID, Company> companyMap = new HashMap<>();
+        for (Company company : foundCompanies) {
+            companyMap.put(company.getId(), company);
+        }
+
+        // 4. 응답 DTO 구조
+        List<CompanyInternalResponse> responses = new ArrayList<>();
+        List<UUID> notFoundIds = new ArrayList<>();
+
+        // 5. 찾았으면 CompanyInternalResponse에, 못 찾았으면 id만 notFoundIds 저장
+        for (UUID id : distinctIds) {
+            Company company = companyMap.get(id);
+            if(company != null) {
+                responses.add(CompanyInternalResponse.from(company));
+            } else {
+                notFoundIds.add(id);
+            }
+        }
+
+        return CompanyBulkResponse.of(responses, notFoundIds);
     }
 }
