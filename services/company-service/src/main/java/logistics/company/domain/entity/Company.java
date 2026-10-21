@@ -37,6 +37,7 @@ public class Company extends BaseEntity {
         this.name = name;
         this.address = address;
     }
+
     public static Company create(UUID hubId, UUID managerUserId, String name, String address) {
         return new Company(hubId, managerUserId, name, address);
     }

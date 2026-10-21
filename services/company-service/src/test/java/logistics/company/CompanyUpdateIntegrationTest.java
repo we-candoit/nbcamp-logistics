@@ -128,7 +128,7 @@ class CompanyUpdateIntegrationTest {
                 saved.getId(), managerId, USER, request(newHubId, NEW_NAME, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+                .isEqualTo(ErrorCode.COMPANY_FORBIDDEN);
 
         Company reloaded = reload();
         assertThat(reloaded.getName()).isEqualTo(NAME);

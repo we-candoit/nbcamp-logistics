@@ -22,7 +22,7 @@ public enum ErrorCode {
     COMPANY_NOT_FOUND(404, "업체를 찾을 수 없습니다."),
     MANAGER_ALREADY_ASSIGNED(409, "이미 다른 업체를 담당하고 있는 사용자입니다."),
 
-    COMPANY_UPDATE_FORBIDDEN(403, "업체 수정 권한이 없습니다."),
+    COMPANY_FORBIDDEN(403, "업체 관리 권한이 없습니다."),
     NO_UPDATE_FIELDS(400, "변경할 내용이 없습니다."),
 
     // 사용자 확인

@@ -3,8 +3,10 @@ package logistics.company.application.service;
 import logistics.company.domain.entity.Company;
 import logistics.company.infrastructure.client.HubClient;
 import logistics.company.infrastructure.client.UserClient;
+import logistics.company.infrastructure.client.dto.UserAffiliationReleaseRequest;
 import logistics.company.infrastructure.client.dto.UserAffiliationUpdateRequest;
 import logistics.company.infrastructure.client.dto.UserResponse;
+import logistics.company.infrastructure.repository.CompanyItemRepository;
 import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.infrastructure.repository.CompanySpecification;
 import logistics.company.presentation.dto.request.company.CompanyCreateRequest;
@@ -28,6 +30,7 @@ import java.util.*;
 public class CompanyService {
 
     private final CompanyRepository companyRepository;
+    private final CompanyItemRepository companyItemRepository;
     private final HubClient hubClient;
     private final UserClient userClient;
 
@@ -104,7 +107,7 @@ public class CompanyService {
         // 2. 권한 체크: MASTER 또는 해당 업체 관리자 본인
         boolean isMaster = MASTER.equals(role);
         if (!isMaster && !company.isManagedBy(userId)) {
-            throw new BusinessException(ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+            throw new BusinessException(ErrorCode.COMPANY_FORBIDDEN);
         }
 
         // 3. 기존 값과 비교해 실제로 바뀌는 항목만 판별 (null = 변경 안 함, 수정 취소)
@@ -120,7 +123,7 @@ public class CompanyService {
         // 4. 허브 변경: MASTER 권한 체크 + 허브 존재 확인 (실패 시 403)
         if (hubChanged) {
             if (!isMaster) {
-                throw new BusinessException(ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+                throw new BusinessException(ErrorCode.COMPANY_FORBIDDEN);
             }
             hubClient.getHub(request.getHubId());
             company.changeHub(request.getHubId());
@@ -175,5 +178,26 @@ public class CompanyService {
         }
 
         return CompanyBulkResponse.of(responses, notFoundIds);
+    }
+
+    @Transactional
+    public void deleteCompany(UUID companyId, UUID userId, String role) {
+        // 1. 삭제할 업체 존재 확인
+        Company company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
+
+        // 2. 권한 체크 : MASTER 또는 해당 업체 관리자인지 확인
+        if (!MASTER.equals(role) && !company.isManagedBy(userId)) { // MASTER or 해당 업체 관리자가 아닌 경우
+            throw new BusinessException(ErrorCode.COMPANY_FORBIDDEN);
+        }
+
+        // 3. 논리적 삭제(soft delete: deleted_at, deleted_by 기록)
+        company.delete(userId);
+
+        // 4. 업체 소속 상품 연쇄 논리 삭제 (쿼리 1번으로 수행, 업체와 같은 삭제 시각 기록, 같은 트랜잭션이라 실패 시 함께 롤백)
+        companyItemRepository.softDeleteAllByCompanyId(companyId, userId, company.getDeletedAt());
+
+        // 5. 담당자 소속 해제 CONFIRMED → PENDING, affiliationName은 유지 (DB 반영 성공 후 외부 호출, 실패 시 업체, 상품 삭제 전체 롤백)
+        userClient.releaseAffiliation(company.getManagerUserId(), UserAffiliationReleaseRequest.of(companyId));
     }
 }

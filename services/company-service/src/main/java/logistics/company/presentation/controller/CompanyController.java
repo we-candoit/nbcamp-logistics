@@ -57,4 +57,14 @@ public class CompanyController {
                                                          @Valid @RequestBody CompanyUpdateRequest request) {
         return ResponseEntity.ok(companyService.updateCompany(companyId, userId, role, request));
     }
+
+    // 업체 삭제
+    @DeleteMapping("/api/companies/{companyId}")
+    public ResponseEntity<?> deleteCompany(@PathVariable("companyId") UUID companyId,
+                                        @RequestAttribute(USER_ID_HEADER) UUID userId,
+                                        @RequestAttribute(ROLE_HEADER) String role) {
+
+        companyService.deleteCompany(companyId, userId, role);
+        return ResponseEntity.noContent().build();
+    }
 }
