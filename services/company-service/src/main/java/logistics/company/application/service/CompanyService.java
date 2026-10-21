@@ -52,7 +52,6 @@ public class CompanyService {
         }
 
         // 3. 허브 존재 확인 (실패 시 FeignException → GlobalExceptionHandler)
-        // TODO(hub-service 실패 응답 확인 필요)
         hubClient.getHub(request.getHubId());
 
         // 4.관리자로 등록 가능한 사용자 여부 체크 :담당자 존재/COMPANY/PENDING 확인(affiliationType == COMPANY, affiliationStatus == PENDING)
@@ -61,13 +60,12 @@ public class CompanyService {
 
         // 5. 업체 엔티티 생성
         Company company = Company.create(
-                request.getHubId(), managerUserId, request.getName(), request.getAddress()
+                request.getHubId(), managerUserId, request.getName().trim(), request.getAddress()
         );
         // 즉시 INSERT → 동시 요청으로 인덱스 위반이 나면 여기서 예외 발생(409 -> GlobalExceptionHandler)
         Company saved = companyRepository.saveAndFlush(company);
 
         // 6. 소속 확정(companyId 갱신, CONFIRMED, 소속 업체명(affiliationName) 갱신, 유저 확정 실패하면 생성한 업체는 삭제로 보상
-        // Todo (FeignClient 연동): user-service 소속 확정 호출
         userClient.updateAffiliation(managerUserId, UserAffiliationUpdateRequest.confirm(saved.getId(), saved.getName()));
 
         return CompanyResponse.from(saved);
@@ -111,8 +109,10 @@ public class CompanyService {
         }
 
         // 3. 기존 값과 비교해 실제로 바뀌는 항목만 판별 (null = 변경 안 함, 수정 취소)
+        // 변경하는 업체명은 업체명처럼 앞뒤 공백 제거 후 비교, 저장
+        String newName = request.getName() == null ? null : request.getName().trim();
         boolean hubChanged = isChanged(request.getHubId(), company.getHubId());
-        boolean nameChanged = isChanged(request.getName(), company.getName());
+        boolean nameChanged = isChanged(newName, company.getName());
         boolean addressChanged = isChanged(request.getAddress(), company.getAddress());
 
         // 바뀌는 항목이 없으면 400 (모두 null이거나 모두 기존과 같은 경우)
