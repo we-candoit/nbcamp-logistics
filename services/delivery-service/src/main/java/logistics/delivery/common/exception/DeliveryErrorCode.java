@@ -31,6 +31,7 @@ public enum DeliveryErrorCode {
     // 생성
     DELETED_DELIVERY_RECREATION_NOT_ALLOWED("이미 삭제된 배송은 다시 생성할 수 없습니다."),
     DELIVERY_CREATION_CONFLICT("같은 주문에 다른 내용의 배송이 이미 존재합니다."),
+    DELIVERY_CREATION_BLOCKED("취소 또는 삭제 처리된 주문의 배송은 생성할 수 없습니다."),
 
     // 취소, 삭제
     DELIVERY_CANCELLATION_NOT_ALLOWED("출발 전 배송만 취소할 수 있습니다."),

@@ -53,4 +53,8 @@ public interface DeliveryService {
             UUID requesterId,
             String role
     );
+
+    DeliveryOrderCancelResponse cancelDeliveryByOrderId(UUID orderId);
+
+    void deleteDeliveryByOrderId(UUID orderId);
 }
