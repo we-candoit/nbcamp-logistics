@@ -39,11 +39,11 @@ public class OrderService {
 
         try {
             //재고감소 / 주문ID로 hub-service에서 중복 차감 방지
+            progress.markStockDecreaseRequested();
             clientService.decreaseStock(orderItem.getDepartureHubId(), orderItem.getItemId(), orderItem.getQuantity(), order.getId());
-            progress.markStockDecreased();
 
             //배송생성
-            progress.markDeliveryRequested();
+            progress.markDeliveryCreateRequested();
             CreateDeliveryResponse delivery = clientService.createDelivery(
                     CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
             );

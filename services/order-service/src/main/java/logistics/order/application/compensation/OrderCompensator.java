@@ -41,12 +41,12 @@ public class OrderCompensator {
         boolean compensated = true;
 
         //배송생성을 요청했다면 생성 여부와 관계없이 주문ID로 취소/삭제 (배송이 없으면 이후 생성을 차단)
-        if (progress.isDeliveryRequested()) {
+        if (progress.isDeliveryCreateRequested()) {
             //배송은 취소된 상태에서만 삭제 가능
             compensated &= compensate(orderId, "배송취소", () -> clientService.cancelDeliveryByOrderId(orderId))
                     && compensate(orderId, "배송삭제", () -> clientService.deleteDeliveryByOrderId(orderId));
         }
-        if (progress.isStockDecreased()) {
+        if (progress.isStockDecreaseRequested()) {
             compensated &= compensate(orderId, "재고복구", () -> clientService.restoreStock(
                     progress.getHubId(), progress.getItemId(), progress.getQuantity(), orderId));
         }
