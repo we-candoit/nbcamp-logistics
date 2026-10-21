@@ -1,6 +1,7 @@
 package logistics.delivery;
 
 import com.jayway.jsonpath.JsonPath;
+import logistics.delivery.application.DeliveryDemoService;
 import logistics.delivery.common.entity.BaseEntity;
 import logistics.delivery.domain.entity.Delivery;
 import logistics.delivery.domain.entity.DeliveryRoute;
@@ -14,8 +15,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -42,7 +45,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
                 "spring.jpa.hibernate.ddl-auto=create-drop",
                 "eureka.client.enabled=false",
                 "eureka.client.service-url.defaultZone=http://localhost:8761/eureka/",
-                "spring.cloud.discovery.enabled=false"
+                "spring.cloud.discovery.enabled=false",
+                // 설정만 켜져 있어도 demo 프로필이 없으면 시연 기능이 동작하면 안 된다.
+                "delivery.demo.auto-assignment.enabled=true",
+                "delivery.demo.actual-metrics.enabled=true",
+                "delivery.demo.auto-assignment.hub-managers[22222222-2222-4222-8222-222222222222]=88888888-8888-4888-8888-888888888888"
         }
 )
 class DeliveryCreationIntegrationTest {
@@ -55,6 +62,12 @@ class DeliveryCreationIntegrationTest {
 
     @Autowired
     private DeliveryRouteRepository deliveryRouteRepository;
+
+    @Autowired
+    private ObjectProvider<DeliveryDemoService> demoService;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     // 같은 허브 배송은 허브 서비스를 호출하지 않아야 한다.
     @MockitoBean
@@ -147,6 +160,34 @@ class DeliveryCreationIntegrationTest {
         assertThat(DeliverySnapshot.from(findDelivery())).isEqualTo(beforeDelivery);
         assertThat(RouteSnapshot.from(findRoute())).isEqualTo(beforeRoute);
         verifyNoInteractions(hubClient);
+    }
+
+    /** demo 프로필이 없으면 자동 배정과 고정 실적 기록 모두 비활성화되는지 검증한다. */
+    @Test
+    @DisplayName("demo 프로필 없이 설정값만 켜도 시연 기능은 적용되지 않는다")
+    void ignoresDemoSettingsWithoutDemoProfile() throws Exception {
+        assertThat(demoService.getIfAvailable()).isNull();
+        hubId = UUID.fromString("22222222-2222-4222-8222-222222222222");
+        assertThat(post("Test address", "testuser").statusCode()).isEqualTo(201);
+        assertThat(findDelivery().getManagerId()).isNull();
+        DeliveryRoute route = findRoute();
+        assertThat(route.getManagerId()).isNull();
+
+        // 상태 전이 검증을 통과할 담당자만 테스트 DB에 준비한다.
+        jdbc.update("UPDATE p_delivery_routes SET manager_id = ? WHERE id = ?", UUID.randomUUID(), route.getId());
+        for (String status : new String[]{"IN_TRANSIT", "ARRIVED"}) {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + port + "/api/deliveries/" + findDelivery().getId()
+                            + "/routes/" + route.getId() + "/status"))
+                    .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
+                    .header("X-User-Id", UUID.randomUUID().toString()).header("X-Role-Name", "MASTER")
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"status\":\"" + status + "\"}"))
+                    .build();
+            assertThat(httpClient.send(request, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+        }
+        assertThat(findRoute().getStatus()).isEqualTo(DeliveryRouteStatus.ARRIVED);
+        assertThat(findRoute().getActualDistance()).isNull();
+        assertThat(findRoute().getActualDuration()).isNull();
     }
 
     private HttpResponse<String> post(String address, String username) throws Exception {
