@@ -23,7 +23,8 @@ spring:
   data:
     web:
       pageable:
-        max-page-size: 50
+        max-page-size: 100            # size가 100을 넘으면 100으로 제한
+        serialization-mode: via-dto   # Page 응답을 {content, page} 구조로 직렬화 (기존 PageConfig 역할)
 
 server:
   port: ${DISCOVERY_SERVER_PORT}
