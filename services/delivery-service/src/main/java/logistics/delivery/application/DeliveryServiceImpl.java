@@ -22,16 +22,15 @@ import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
 import logistics.delivery.presentation.dto.request.DeliveryStatusUpdateRequest;
 import logistics.delivery.presentation.dto.response.*;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.AuditorAware;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -41,10 +40,12 @@ public class DeliveryServiceImpl implements DeliveryService{
 
     private final DeliveryRepository deliveryRepository;
     private final DeliveryRouteRepository deliveryRouteRepository;
-    private final AuditorAware<UUID> auditorAware;
     private final HubClientAdapter hubClientAdapter;
     private final OrderClientAdapter orderClientAdapter;
     private final UserClientAdapter userClientAdapter;
+    private final DeliveryOrderControlManager controlManager;
+    private final DeliveryCompensationTransactionService compensationTransactionService;
+    private final DeliveryCreationTransactionService creationTransactionService;
 
     /**
      * 배송 목록 조회 및 검색
@@ -173,161 +174,93 @@ public class DeliveryServiceImpl implements DeliveryService{
     }
 
     /**
-     * 배송 생성
-     * 주문 서비스에게 배송 생성을 요청 받아 배송과 배송 경로를 생성하는 메서드
+     * 관리 기록을 준비하고 배송 생성 가능 여부를 확인
+     * 허브 이동 정보는 트랜잭션 밖에서 조회하고 최종 저장 전에 다시 검증
      * @param request 배송 생성 요청
-     * @return 배송 생성 응답
+     * @return 신규 생성 또는 기존 배송 반환 결과
      */
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public DeliveryCreateResult createDelivery(DeliveryCreateRequest request) {
+        controlManager.prepare(request.orderId());
 
-        // 기존에 해당 orderId로 생성된 배송이 있는지 확인
-        Delivery existingDelivery = deliveryRepository
-                .findByOrderId(request.orderId())
-                .orElse(null);
+        Optional<DeliveryCreateResult> existing =
+                creationTransactionService.findExisting(request);
 
-        if (existingDelivery != null) {
-            if (existingDelivery.getDeletedAt() != null) {
-                throw new DeliveryException(DeliveryErrorCode.DELETED_DELIVERY_RECREATION_NOT_ALLOWED);
-            }
+        if (existing.isPresent()) {
+            return existing.get();
+        }
 
-            boolean sameRequest = existingDelivery.matchesCreation(
+        HubRouteResponse hubRoute = null;
+
+        if (!request.departureHubId().equals(request.destinationHubId())) {
+            hubRoute = hubClientAdapter.getRoute(
                     request.departureHubId(),
-                    request.destinationHubId(),
-                    request.address(),
-                    request.recipientName(),
-                    request.recipientPhone()
-            );
-
-            if (!sameRequest) {
-                throw new DeliveryException(DeliveryErrorCode.DELIVERY_CREATION_CONFLICT);
-            }
-
-            return new DeliveryCreateResult(
-                    DeliveryCreateResponse.from(existingDelivery),
-                    false
+                    request.destinationHubId()
             );
         }
 
-        // 새로운 배송 생성
-        Delivery delivery = request.toEntity();
-        List<DeliveryRoute> routes = createRoutes(delivery);
-
-        deliveryRepository.save(delivery);
-        deliveryRouteRepository.saveAll(routes);
-
-        return new DeliveryCreateResult(
-                DeliveryCreateResponse.from(delivery),
-                true
-        );
+        return creationTransactionService.create(request, hubRoute);
     }
 
     /**
-     * 허브 서비스를 조회해 배송 경로를 생성하는 private 메서드
-     * @param delivery 생성 대상 배송
-     * @return 배송 경로
+     * 배송의 주문 ID로 관리 기록을 준비한 뒤 배송을 취소한다.
+     *
+     * @param deliveryId 취소할 배송 ID
+     * @return 배송 취소 결과
      */
-    private List<DeliveryRoute> createRoutes(Delivery delivery){
+    @Override
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public DeliveryCancelResponse cancelDelivery(UUID deliveryId) {
+        Delivery delivery = deliveryRepository.getByIdIncludingDeleted(deliveryId);
+        UUID orderId = delivery.getOrderId();
 
-        List<DeliveryRoute> routes = new ArrayList<>();
+        controlManager.prepare(orderId);
 
-        UUID departureHubId = delivery.getDepartureHubId();
-        UUID destinationHubId = delivery.getDestinationHubId();
-
-        // 출발 허브와 도착 허브가 다르면 허브 -> 허브 구간을 먼저 생성
-        if(!departureHubId.equals(destinationHubId)){
-            HubRouteResponse hubRoute = hubClientAdapter.getRoute(departureHubId, destinationHubId);
-
-            DeliveryRoute hubToHub = DeliveryRoute.builder()
-                    .delivery(delivery)
-                    .sequence(1)
-                    .departureHubId(departureHubId)
-                    .destinationHubId(destinationHubId)
-                    .expectedDistance(hubRoute.distance())
-                    .expectedDuration(hubRoute.duration())
-                    .type(RouteType.HUB_TO_HUB)
-                    .build();
-
-            routes.add(hubToHub);
-        }
-
-        // 모든 배송의 마지막 구간은 허브 -> 업체
-        DeliveryRoute hubToCompany = DeliveryRoute.builder()
-                .delivery(delivery)
-                .sequence(routes.size() + 1)
-                .departureHubId(destinationHubId)
-                .type(RouteType.HUB_TO_COMPANY)
-                .build();
-
-        routes.add(hubToCompany);
-
-        return routes;
+        return compensationTransactionService.cancelByDeliveryId(deliveryId, orderId);
     }
 
     /**
-     * 배송 취소
-     * 배송을 취소하는 경우 해당 배송과 배송 경로를 함께 취소
-     * 배송이 없는 경우 : 404
-     * 배송이 이미 논리 삭제된 경우 : 404
-     * 배송을 취소할 수 없는 경우 : 409
-     * @param deliveryId 취소 대상 배송
+     * 주문ID로 배송 취소
+     * 주문별 관리기록을 준비하고 배송 취소 또는 배송 생성 차단
+     * @param orderId 배송을 취소할 대상 주문ID
      * @return 배송 취소 응답
      */
     @Override
-    @Transactional
-    public DeliveryCancelResponse cancelDelivery(UUID deliveryId) {
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public DeliveryOrderCancelResponse cancelDeliveryByOrderId(UUID orderId) {
+        controlManager.prepare(orderId);
 
-        Delivery delivery = deliveryRepository.getByIdIncludingDeleted(deliveryId);
+        return compensationTransactionService.cancelByOrderId(orderId);
 
-        if(delivery.getDeletedAt() != null){
-            throw new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND);
-        }
-
-        // 이미 취소된 배송에 대해 반복 취소 요청이 오는 경우 기존 결과를 응답
-        if(delivery.getStatus() == DeliveryStatus.CANCELLED){
-            return DeliveryCancelResponse.from(delivery);
-        }
-
-        List<DeliveryRoute> routes = deliveryRouteRepository.findAllByDeliveryIdOrderBySequenceAsc(deliveryId);
-
-        delivery.cancel();
-
-        for(DeliveryRoute route : routes){
-            route.cancel();
-        }
-
-        return DeliveryCancelResponse.from(delivery);
     }
 
     /**
-     * 배송 삭제
-     * 배송을 삭제하는 경우 이미 취소된 배송에 한해 배송과 배송 경로를 삭제
-     * @param deliveryId
+     * 배송의 주문 ID로 관리 기록을 준비한 뒤 배송 삭제
+     *
+     * @param deliveryId 삭제할 배송 ID
      */
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void deleteDelivery(UUID deliveryId) {
-
         Delivery delivery = deliveryRepository.getByIdIncludingDeleted(deliveryId);
+        UUID orderId = delivery.getOrderId();
 
-        if(delivery.getDeletedAt() != null) return;
+        controlManager.prepare(orderId);
 
-        // 배송 상태가 삭제 가능한지 검증
-        delivery.validateDeletable();
+        compensationTransactionService.deleteByDeliveryId(deliveryId, orderId);
+    }
 
-        UUID userId = auditorAware.getCurrentAuditor()
-                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.REQUESTER_REQUIRED));
+    /**
+     * 주문ID로 배송 삭제
+     * @param orderId 배송을 삭제할 대상 주문ID
+     */
+    @Override
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void deleteDeliveryByOrderId(UUID orderId) {
+        controlManager.prepare(orderId);
 
-        List<DeliveryRoute> routes = deliveryRouteRepository.findAllByDeliveryIdOrderBySequenceAsc(deliveryId);
-
-        LocalDateTime deletedAt = LocalDateTime.now();
-
-        delivery.delete(userId, deletedAt);
-
-        for(DeliveryRoute route : routes){
-            route.delete(userId, deletedAt);
-        }
+        compensationTransactionService.deleteByOrderId(orderId);
     }
 
     /**

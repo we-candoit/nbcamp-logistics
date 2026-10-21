@@ -2,6 +2,8 @@ package logistics.delivery;
 
 import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManagerFactory;
+import logistics.delivery.domain.entity.Delivery;
+import logistics.delivery.domain.entity.DeliveryRoute;
 import logistics.delivery.domain.enums.DeliveryStatus;
 import logistics.delivery.infrastructure.client.HubClient;
 import logistics.delivery.infrastructure.client.dto.HubRouteResponse;
@@ -192,8 +194,9 @@ class DeliveryDeletionIntegrationTest {
         HttpResponse<String> response = delete(deliveryId, "deleteuser", "USER");
 
         assertThat(response.statusCode()).isEqualTo(500);
-        // 실패 전에 배송과 첫 번째 경로의 UPDATE가 실제로 실행됐어야 롤백 검증이 의미가 있다.
-        assertThat(statistics.getEntityUpdateCount()).isEqualTo(2);
+        // 관리 기록 UPDATE와 구분해 배송과 배송 경로의 1구간이 실제로 변경됐는지 확인한다.
+        assertThat(statistics.getEntityStatistics(Delivery.class.getName()).getUpdateCount()).isEqualTo(1);
+        assertThat(statistics.getEntityStatistics(DeliveryRoute.class.getName()).getUpdateCount()).isEqualTo(1);
         // 응답 후 DB를 다시 조회해 배송·모든 경로가 삭제 전 상태 그대로인지 확인한다.
         DatabaseSnapshot after = snapshot(deliveryId);
         assertThat(after).isEqualTo(before);
