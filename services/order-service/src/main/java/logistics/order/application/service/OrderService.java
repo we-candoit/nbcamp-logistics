@@ -51,12 +51,12 @@ public class OrderService {
             orderTransactionService.save(order, orderItem);
         } catch (RuntimeException e) {
             orderCompensator.compensateCreate(progress);
-            clientService.sendSlackDm(user.getSlackId(), "주문실패");
+            clientService.sendSlackDm(user.getSlackId(), orderMessage("주문 실패", orderItem));
             throw e;
         }
 
         //Slack알림
-        clientService.sendSlackDm(user.getSlackId(), "주문성공");
+        clientService.sendSlackDm(user.getSlackId(), orderMessage("주문 완료", orderItem));
 
         return CreateOrderResponse.from(orderItem);
     }
@@ -106,6 +106,11 @@ public class OrderService {
             orderCompensator.compensateDelete(orderId);
             throw e;
         }
+    }
+
+    //주문 알림 메시지 / ex) [주문 완료] 상품명: 생수 2L / 수량: 3개
+    private String orderMessage(String result, OrderItem orderItem) {
+        return "[%s] 상품명: %s / 수량: %d개".formatted(result, orderItem.getItemName(), orderItem.getQuantity());
     }
 
     private OrderItem prepareCreateOrder(CreateOrderRequest request, FetchUserByIdResponse.UserData user) {

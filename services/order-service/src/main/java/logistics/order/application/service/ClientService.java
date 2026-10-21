@@ -110,7 +110,13 @@ public class ClientService {
     }
 
     //슬랙 DM 전송 / 알림 실패가 주문 처리 결과에 영향을 주지 않도록 예외는 로그만 남김
+    //슬랙 ID가 없는 유저는 전송하지 않음
     public void sendSlackDm(String slackUserId, String message) {
+        if (slackUserId == null || slackUserId.isBlank()) {
+            log.info("슬랙 ID가 없어 DM 전송 생략");
+            return;
+        }
+
         try {
             slackClient.sendDm(slackUserId, message);
         } catch (RuntimeException e) {

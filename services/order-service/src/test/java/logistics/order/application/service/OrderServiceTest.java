@@ -94,6 +94,7 @@ class OrderServiceTest {
     private final UUID deliveryId = UUID.randomUUID();
     private final Long price = 15_000L;
     private final Long quantity = 3L;
+    private final String slackId = "U00TEST01";
 
     private MockHttpServletRequest httpRequest;
 
@@ -136,8 +137,13 @@ class OrderServiceTest {
 
     //유저 서비스는 응답을 data로 감싸서 반환
     private FetchUserByIdResponse userResponse(UUID companyId) {
+        return userResponse(companyId, slackId);
+    }
+
+    private FetchUserByIdResponse userResponse(UUID companyId, String slackId) {
         FetchUserByIdResponse.UserData data = new FetchUserByIdResponse.UserData();
         data.setCompanyId(companyId);
+        data.setSlackId(slackId);
         return new FetchUserByIdResponse(true, null, data);
     }
 
@@ -346,6 +352,32 @@ class OrderServiceTest {
             //then
             assertThat(response.getDeliveryId()).isEqualTo(deliveryId);
             verify(slackClient).sendDm(any(), any());
+        }
+
+        @Test
+        public void 주문이_생성되면_주문자_슬랙ID로_상품명과_수량을_알린다() {
+            //given
+            loginAs("MASTER");
+
+            //when
+            orderService.create(orderRequest());
+
+            //then
+            verify(slackClient).sendDm(slackId, "[주문 완료] 상품명: 생수 2L / 수량: 3개");
+        }
+
+        @Test
+        public void 주문자의_슬랙ID가_없으면_알림을_보내지_않고_주문은_정상_생성된다() {
+            //given
+            loginAs("MASTER");
+            given(userServiceClient.fetchUserById(userId)).willReturn(userResponse(requesterId, null));
+
+            //when
+            CreateOrderResponse response = orderService.create(orderRequest());
+
+            //then
+            assertThat(response.getDeliveryId()).isEqualTo(deliveryId);
+            verifyNoInteractions(slackClient);
         }
     }
 
@@ -571,6 +603,17 @@ class OrderServiceTest {
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
             verify(slackClient).sendDm(any(), any());
+        }
+
+        @Test
+        public void 주문생성에_실패하면_주문자_슬랙ID로_상품명과_수량을_실패로_알린다() {
+            //given
+            FeignException stockError = feignException();
+            willThrow(stockError).given(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
+            verify(slackClient).sendDm(slackId, "[주문 실패] 상품명: 생수 2L / 수량: 3개");
         }
 
         @Test
