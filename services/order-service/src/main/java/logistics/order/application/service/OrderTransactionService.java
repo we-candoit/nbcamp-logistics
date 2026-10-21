@@ -53,15 +53,16 @@ public class OrderTransactionService {
         orderItemRepository.save(orderItems);
     }
 
-    //주문ID를 사용하여 특정 주문취소
+    //주문ID를 사용하여 특정 주문취소 / 재고복원에 필요한 주문상품 정보를 함께 반환
     @Transactional
-    public Order cancel(UUID orderId) {
-        Order order = orderRepository.findByIdAndDeletedAtIsNull(orderId).orElseThrow(
+    public OrderItem cancel(UUID orderId) {
+        OrderItem orderItem = orderItemRepository.findWithOrder(orderId).orElseThrow(
                 () -> new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+        Order order = orderItem.getOrder();
 
         orderValidator.validateOrderOwner(order.getOrderUserId());
         order.cancel();
-        return order;
+        return orderItem;
     }
 
     //주문ID를 사용하여 특정 주문삭제, 주문과 주문상품을 함께 soft delete

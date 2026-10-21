@@ -14,10 +14,12 @@ import logistics.order.presentation.dto.response.CreateOrderResponse;
 import logistics.order.presentation.dto.response.OrderDetailResponse;
 import logistics.order.presentation.dto.response.OrderListResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderService {
@@ -82,7 +84,8 @@ public class OrderService {
 
     //주문ID로 주문취소
     public CancelOrderResponse cancelOrderById(UUID orderId) {
-        Order order = orderTransactionService.cancel(orderId);
+        OrderItem orderItem = orderTransactionService.cancel(orderId);
+        Order order = orderItem.getOrder();
 
         try {
             clientService.cancelDeliveryByOrderId(orderId);
@@ -91,6 +94,9 @@ public class OrderService {
             orderCompensator.compensateCancel(orderId);
             throw e;
         }
+
+        //재고복원 / 배송이 취소된 이후에만 가능 (출발한 배송은 취소가 거절되므로)
+        restoreStockForCancel(orderItem);
 
         return CancelOrderResponse.from(order);
     }
@@ -105,6 +111,18 @@ public class OrderService {
             //배송삭제 실패시 주문/주문상품 삭제를 되돌리는 보상시나리오
             orderCompensator.compensateDelete(orderId);
             throw e;
+        }
+    }
+
+    //주문취소 재고복원 / 실패해도 배송은 이미 취소되어 주문취소는 유지
+    //현재는 관리자가 로그로 확인 후 수동으로 재고를 맞춤 (추후 스케줄러/비동기 재처리 도입 예정)
+    private void restoreStockForCancel(OrderItem orderItem) {
+        try {
+            clientService.restoreStock(orderItem.getDepartureHubId(), orderItem.getItemId(), orderItem.getQuantity());
+        } catch (RuntimeException e) {
+            log.error("주문취소 재고복원 실패, 수동 처리 필요 orderId={} hubId={} itemId={} quantity={}",
+                    orderItem.getOrder().getId(), orderItem.getDepartureHubId(),
+                    orderItem.getItemId(), orderItem.getQuantity(), e);
         }
     }
 

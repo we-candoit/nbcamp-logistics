@@ -317,7 +317,7 @@ class OrderTransactionServiceTest {
             em.clear();
 
             //when
-            Order canceled = orderTransactionService.cancel(order.getId());
+            Order canceled = orderTransactionService.cancel(order.getId()).getOrder();
             em.flush();
             em.clear();
 
@@ -325,6 +325,24 @@ class OrderTransactionServiceTest {
             assertThat(canceled.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                     .isEqualTo(OrderStatus.CANCELLED);
+        }
+
+        @Test
+        public void 주문을_취소하면_재고복원에_필요한_주문상품_정보를_반환한다() {
+            //given
+            Order order = confirmedOrder();
+            OrderItem orderItem = orderItem(order);
+            orderTransactionService.save(order, orderItem);
+            em.flush();
+            em.clear();
+
+            //when
+            OrderItem canceled = orderTransactionService.cancel(order.getId());
+
+            //then
+            assertThat(canceled.getDepartureHubId()).isEqualTo(orderItem.getDepartureHubId());
+            assertThat(canceled.getItemId()).isEqualTo(orderItem.getItemId());
+            assertThat(canceled.getQuantity()).isEqualTo(orderItem.getQuantity());
         }
 
         @Test
