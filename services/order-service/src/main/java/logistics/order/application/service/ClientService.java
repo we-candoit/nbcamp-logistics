@@ -59,14 +59,14 @@ public class ClientService {
         }
     }
 
-    //재고 차감
-    public void decreaseStock(UUID hubId, UUID itemId, Long quantity) {
-        hubServiceClient.decreaseStock(hubId, itemId, quantity);
+    //재고 차감 / 같은 주문ID로 다시 요청해도 hub-service에서 한 번만 차감 (재시도 시 중복 차감 방지)
+    public void decreaseStock(UUID hubId, UUID itemId, Long quantity, UUID orderId) {
+        hubServiceClient.decreaseStock(hubId, itemId, quantity, orderId);
     }
 
-    //재고 복구
-    public void restoreStock(UUID hubId, UUID itemId, Long quantity) {
-        hubServiceClient.restoreStock(hubId, itemId, quantity);
+    //재고 복구 / 같은 주문ID로 다시 요청해도 hub-service에서 한 번만 복구 (재시도 시 중복 복구 방지)
+    public void restoreStock(UUID hubId, UUID itemId, Long quantity, UUID orderId) {
+        hubServiceClient.restoreStock(hubId, itemId, quantity, orderId);
     }
 
     //배송 생성
