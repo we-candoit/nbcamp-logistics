@@ -799,12 +799,14 @@ class OrderServiceTest {
         private Order givenCancelableOrder() {
             Order order = new Order(userId, requesterId, requesterHubId, "서울시 강남구 테헤란로 1", null);
             order.confirm(deliveryId);
+            OrderItem orderItem = new OrderItem(itemId, "생수 2L", price, quantity, supplierHubId, supplierId, order);
             given(orderTransactionService.cancel(order.getId())).willAnswer(invocation -> {
                 order.cancel();
-                return order;
+                return orderItem;
             });
             given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId()))
                     .willReturn(new CancelDeliveryResponse(order.getId(), deliveryId, "CANCELLED"));
+            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity)).willReturn("OK");
             return order;
         }
 
@@ -844,6 +846,37 @@ class OrderServiceTest {
             }
 
             @Test
+            public void 배송취소에_성공하면_공급업체_허브에_주문수량만큼_재고를_복원한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                InOrder inOrder = inOrder(deliveryServiceClient, hubServiceClient);
+
+                //when
+                orderService.cancelOrderById(order.getId());
+
+                //then
+                inOrder.verify(deliveryServiceClient).cancelDeliveryByOrderId(order.getId());
+                inOrder.verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            }
+
+            @Test
+            public void 재고복원에_실패해도_주문취소는_유지되고_정상_응답한다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity)).willThrow(feignException());
+
+                //when
+                CancelOrderResponse response = orderService.cancelOrderById(order.getId());
+
+                //then
+                //배송은 이미 취소되어 주문을 복구하지 않음 (관리자가 로그로 확인 후 수동 처리)
+                assertThat(response.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+                verify(orderTransactionService, never()).revertCancel(any());
+            }
+
+            @Test
             public void 배송이_없어_생성이_차단되어도_주문은_취소된다() {
                 //given
                 loginAs("MASTER");
@@ -879,7 +912,7 @@ class OrderServiceTest {
 
             //주문취소(조회/권한/상태 검증) 단계에서 실패하면 배송취소와 보상처리 모두 하지 않음
             private void assertNoDeliveryCallAndNoCompensation() {
-                verifyNoInteractions(deliveryServiceClient);
+                verifyNoInteractions(deliveryServiceClient, hubServiceClient);
                 verify(orderTransactionService, never()).revertCancel(any());
             }
 
@@ -942,6 +975,8 @@ class OrderServiceTest {
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
                 verify(orderTransactionService).revertCancel(order.getId());
+                //출발한 배송은 취소되지 않았으므로 재고도 복원하지 않음
+                verify(hubServiceClient, never()).restoreStock(any(), any(), any());
             }
 
             @Test
