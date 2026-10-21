@@ -104,7 +104,7 @@ public class CompanyService {
         // 2. 권한 체크: MASTER 또는 해당 업체 관리자 본인
         boolean isMaster = MASTER.equals(role);
         if (!isMaster && !company.isManagedBy(userId)) {
-            throw new BusinessException(ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+            throw new BusinessException(ErrorCode.COMPANY_FORBIDDEN);
         }
 
         // 3. 기존 값과 비교해 실제로 바뀌는 항목만 판별 (null = 변경 안 함, 수정 취소)
@@ -120,7 +120,7 @@ public class CompanyService {
         // 4. 허브 변경: MASTER 권한 체크 + 허브 존재 확인 (실패 시 403)
         if (hubChanged) {
             if (!isMaster) {
-                throw new BusinessException(ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+                throw new BusinessException(ErrorCode.COMPANY_FORBIDDEN);
             }
             hubClient.getHub(request.getHubId());
             company.changeHub(request.getHubId());
@@ -175,5 +175,19 @@ public class CompanyService {
         }
 
         return CompanyBulkResponse.of(responses, notFoundIds);
+    }
+
+    public void deleteCompany(UUID companyId, UUID userId, String role) {
+        // 1. 삭제할 업체 존재 확인
+        Company company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
+
+        // 2. 권한 체크 : MASTER 또는 해당 업체 관리자인지 확인
+        if (!MASTER.equals(role) && !company.isManagedBy(userId)) { // MASTER or 해당 업체 관리자가 아닌 경우
+            throw new BusinessException(ErrorCode.COMPANY_FORBIDDEN);
+        }
+
+        // 3. 논리적 삭제(soft delete: deleted_at, deleted_by 기록)
+        company.delete(userId);
     }
 }

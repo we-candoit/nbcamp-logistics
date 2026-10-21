@@ -173,7 +173,7 @@ public class CompanyItemService {
             throw new BusinessException(ErrorCode.ITEM_FORBIDDEN);
         }
 
-        // 3. 없으면 논리 삭제(soft delete: deleted_at, deleted_by 기록)
+        // 3. 논리적 삭제(soft delete: deleted_at, deleted_by 기록)
         companyItem.delete(userId);
     }
 }

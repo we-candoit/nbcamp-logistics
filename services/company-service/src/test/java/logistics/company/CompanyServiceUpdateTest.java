@@ -130,7 +130,7 @@ class CompanyServiceUpdateTest {
         assertBusinessException(
                 () -> companyService.updateCompany(
                         COMPANY_ID, MANAGER_ID, USER, request(NEW_HUB_ID, NEW_NAME, null)),
-                ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+                ErrorCode.COMPANY_FORBIDDEN);
 
         assertThat(company.getHubId()).isEqualTo(HUB_ID);
         assertThat(company.getName()).isEqualTo(NAME);
@@ -146,7 +146,7 @@ class CompanyServiceUpdateTest {
         assertBusinessException(
                 () -> companyService.updateCompany(
                         COMPANY_ID, OTHER_USER_ID, USER, request(null, NEW_NAME, null)),
-                ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+                ErrorCode.COMPANY_FORBIDDEN);
 
         assertThat(company.getName()).isEqualTo(NAME);
         verifyNoInteractions(hubClient);
