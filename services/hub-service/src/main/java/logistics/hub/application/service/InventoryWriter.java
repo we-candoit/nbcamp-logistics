@@ -2,8 +2,11 @@ package logistics.hub.application.service;
 
 import logistics.hub.domain.entity.Hub;
 import logistics.hub.domain.entity.Inventory;
+import logistics.hub.domain.entity.InventoryMovement;
 import logistics.hub.domain.entity.InventoryRestock;
+import logistics.hub.domain.enums.InventoryMovementType;
 import logistics.hub.infrastructure.repository.HubRepository;
+import logistics.hub.infrastructure.repository.InventoryMovementRepository;
 import logistics.hub.infrastructure.repository.InventoryRepository;
 import logistics.hub.infrastructure.repository.InventoryRestockRepository;
 import logistics.hub.presentation.dto.response.InventoryResponse;
@@ -23,6 +26,7 @@ public class InventoryWriter {
     private final HubRepository hubRepository;
     private final InventoryRepository inventoryRepository;
     private final InventoryRestockRepository restockRepository;
+    private final InventoryMovementRepository movementRepository;
 
     @Transactional
     public InventoryResponse create(
@@ -31,34 +35,16 @@ public class InventoryWriter {
             Integer quantity,
             UUID userId
     ) {
-        Hub hub = hubRepository
-                .findByIdAndDeletedAtIsNull(hubId)
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "해당 허브를 찾을 수 없습니다."
-                        )
-                );
+        Hub hub = hubRepository.findByIdAndDeletedAtIsNull(hubId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "해당 허브를 찾을 수 없습니다."));
 
-        if (inventoryRepository.existsByHubIdAndProductId(
-                hubId,
-                productId
-        )) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "이미 등록된 재고입니다."
-            );
+        if (inventoryRepository.existsByHubIdAndProductId(hubId, productId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 등록된 재고입니다.");
         }
 
-        Inventory inventory = new Inventory(
-                hub,
-                productId,
-                quantity,
-                userId
-        );
-
+        Inventory inventory = new Inventory(hub, productId, quantity, userId);
         inventoryRepository.save(inventory);
-
         return new InventoryResponse(inventory);
     }
 
@@ -71,31 +57,17 @@ public class InventoryWriter {
             Integer quantity,
             UUID userId
     ) {
-        if (restockRequestId == null || companyId == null || userId == null || quantity == null || quantity <= 0) {
+        if (restockRequestId == null || companyId == null || userId == null
+                || quantity == null || quantity <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "입고 요청 정보를 확인해주세요.");
         }
 
         hubRepository.findByIdAndDeletedAtIsNull(hubId)
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "해당 허브를 찾을 수 없습니다."
-                        )
-                );
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "해당 허브를 찾을 수 없습니다."));
 
-        Inventory inventory = inventoryRepository
-                .findLockedByHubIdAndProductIdAndDeletedAtIsNull(hubId, productId)
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "최초 재고 등록이 필요합니다."
-                        )
-                );
-
-        // 같은 재고 행을 먼저 잠근 뒤 처리 기록을 검사한다.
-        // 동시에 같은 요청이 와도 앞선 트랜잭션의 완료 후 기록을 확인한다.
-        Optional<InventoryRestock> previous = restockRepository
-                .findByInventoryIdAndRequestId(inventory.getId(), restockRequestId);
+        Inventory inventory = findLockedInventory(hubId, productId);
+        Optional<InventoryRestock> previous = restockRepository.findByInventoryIdAndRequestId(inventory.getId(), restockRequestId);
 
         if (previous.isPresent()) {
             InventoryRestock completed = previous.get();
@@ -109,16 +81,93 @@ public class InventoryWriter {
         try {
             inventory.restock(quantity, userId);
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    e.getMessage(),
-                    e
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
         }
 
-        // 수량 변경과 처리 기록 저장은 같은 트랜잭션에서 함께 커밋/롤백된다.
         restockRepository.save(new InventoryRestock(inventory, restockRequestId, companyId, quantity, userId));
-
         return new InventoryResponse(inventory);
+    }
+
+    @Transactional
+    public InventoryResponse deduct(
+            UUID hubId,
+            UUID productId,
+            UUID orderId,
+            Integer quantity,
+            UUID userId
+    ) {
+        Inventory inventory = findLockedInventory(hubId, productId);
+        Optional<InventoryMovement> previous = movementRepository.findByInventoryIdAndOrderIdAndType(inventory.getId(), orderId, InventoryMovementType.DEDUCTION);
+
+        if (previous.isPresent()) {
+            return existingMovementResponse(inventory, previous.get(), quantity);
+        }
+
+        try {
+            inventory.deduct(quantity, userId);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        }
+
+        movementRepository.save(new InventoryMovement(inventory, orderId, InventoryMovementType.DEDUCTION, quantity, userId));
+        return new InventoryResponse(inventory);
+    }
+
+    @Transactional
+    public InventoryResponse restore(
+            UUID hubId,
+            UUID productId,
+            UUID orderId,
+            Integer quantity,
+            UUID userId
+    ) {
+        Inventory inventory = findLockedInventory(hubId, productId);
+        Optional<InventoryMovement> previous = movementRepository.findByInventoryIdAndOrderIdAndType(inventory.getId(), orderId, InventoryMovementType.RESTORATION);
+
+        if (previous.isPresent()) {
+            return existingMovementResponse(inventory, previous.get(), quantity);
+        }
+
+        InventoryMovement deduction = movementRepository.findByInventoryIdAndOrderIdAndType(inventory.getId(), orderId, InventoryMovementType.DEDUCTION)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.CONFLICT, "해당 주문에 대한 재고 차감 기록이 없습니다."));
+
+        if (!deduction.matches(quantity)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "차감한 수량과 복원하려는 수량이 다릅니다.");
+        }
+
+        try {
+            inventory.restore(quantity, userId);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        }
+
+        movementRepository.save(new InventoryMovement(inventory, orderId, InventoryMovementType.RESTORATION, quantity, userId));
+        return new InventoryResponse(inventory);
+    }
+
+    private Inventory findLockedInventory(UUID hubId, UUID productId) {
+        return inventoryRepository.findLockedByHubIdAndProductIdAndDeletedAtIsNull(hubId, productId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "최초 재고 등록이 필요합니다."));
+    }
+
+    private InventoryResponse existingMovementResponse(
+            Inventory inventory,
+            InventoryMovement previous,
+            Integer quantity
+    ) {
+        if (!previous.matches(quantity)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "동일한 주문 ID를 다른 수량으로 사용할 수 없습니다.");
+        }
+        return new InventoryResponse(inventory, previous.getResultQuantity());
     }
 }
