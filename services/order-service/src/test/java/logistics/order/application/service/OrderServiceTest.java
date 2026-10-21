@@ -20,6 +20,7 @@ import logistics.order.infrastructure.client.dto.CreateDeliveryResponse;
 import logistics.order.infrastructure.client.dto.FetchCompanyByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
+import logistics.order.infrastructure.client.dto.StockResponse;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
@@ -49,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willDoNothing;
@@ -156,7 +158,7 @@ class OrderServiceTest {
                 .willReturn(companyResponse(requesterId, requesterHubId, "요청업체", "서울시 강남구 테헤란로 1"));
         given(companyServiceClient.fetchCompanyById(supplierId))
                 .willReturn(companyResponse(supplierId, supplierHubId, "공급업체", "부산시 해운대구 1"));
-        given(hubServiceClient.decreaseStock(supplierHubId, itemId, quantity)).willReturn("OK");
+        given(hubServiceClient.decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any())).willReturn(new StockResponse());
         given(deliveryServiceClient.createDelivery(any(CreateDeliveryRequest.class)))
                 .willAnswer(invocation -> {
                     CreateDeliveryRequest req = invocation.getArgument(0);
@@ -240,7 +242,11 @@ class OrderServiceTest {
             orderService.create(orderRequest());
 
             //then
-            verify(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
+            //WAITING으로 저장한 주문의 ID로 차감 요청 (hub-service 중복 차감 방지 키)
+            ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+            verify(orderTransactionService, atLeastOnce()).save(orderCaptor.capture(), any());
+            UUID orderId = orderCaptor.getAllValues().get(0).getId();
+            verify(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity, orderId);
         }
 
         @Test
@@ -335,7 +341,7 @@ class OrderServiceTest {
             inOrder.verify(companyServiceClient).fetchCompanyById(requesterId);
             inOrder.verify(companyServiceClient).fetchCompanyById(supplierId);
             inOrder.verify(orderTransactionService).save(any(), any());
-            inOrder.verify(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
+            inOrder.verify(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
             inOrder.verify(deliveryServiceClient).createDelivery(any());
             inOrder.verify(orderTransactionService).save(any(), any());
         }
@@ -567,7 +573,7 @@ class OrderServiceTest {
         void setUp() {
             loginAs("MASTER");
             givenExternalApisSucceed();
-            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity)).willReturn("OK");
+            given(hubServiceClient.restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any())).willReturn(new StockResponse());
             given(deliveryServiceClient.cancelDeliveryByOrderId(any()))
                     .willAnswer(invocation -> new CancelDeliveryResponse(invocation.getArgument(0), deliveryId, "CANCELLED"));
         }
@@ -583,12 +589,12 @@ class OrderServiceTest {
         public void 재고감소에_실패하면_보상없이_FAILED로_변경하고_원래_예외를_전달한다() {
             //given
             FeignException stockError = feignException();
-            willThrow(stockError).given(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
+            willThrow(stockError).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
             verifyNoInteractions(deliveryServiceClient);
-            verify(hubServiceClient, never()).restoreStock(any(), any(), any());
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
             UUID orderId = savedOrderId();
             verify(orderTransactionService).failCreate(orderId, true);
         }
@@ -597,7 +603,7 @@ class OrderServiceTest {
         public void 슬랙_DM_전송에_실패해도_원래_예외를_전달한다() {
             //given
             FeignException stockError = feignException();
-            willThrow(stockError).given(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
+            willThrow(stockError).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
             willThrow(new RuntimeException("slack error")).given(slackClient).sendDm(any(), any());
 
             //when, then
@@ -609,7 +615,7 @@ class OrderServiceTest {
         public void 주문생성에_실패하면_주문자_슬랙ID로_상품명과_수량을_실패로_알린다() {
             //given
             FeignException stockError = feignException();
-            willThrow(stockError).given(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity);
+            willThrow(stockError).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
@@ -628,7 +634,7 @@ class OrderServiceTest {
             UUID orderId = savedOrderId();
             verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
             verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
             verify(orderTransactionService).failCreate(orderId, true);
         }
 
@@ -644,7 +650,7 @@ class OrderServiceTest {
             UUID orderId = savedOrderId();
             verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
             verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
             verify(orderTransactionService).failCreate(orderId, true);
         }
 
@@ -660,7 +666,7 @@ class OrderServiceTest {
             UUID orderId = savedOrderId();
             inOrder.verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
             inOrder.verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
-            inOrder.verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            inOrder.verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
             inOrder.verify(orderTransactionService).failCreate(orderId, true);
         }
 
@@ -669,14 +675,14 @@ class OrderServiceTest {
             //given
             FeignException deliveryError = feignException();
             given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
-            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity))
+            given(hubServiceClient.restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
                     .willThrow(new RuntimeException("재고복구 실패"));
 
             //when, then
             //보상 예외가 아닌 원래 실패 원인이 전달되어야 함
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
             //외부 호출 재시도는 Feign Retryer 담당이라 보상 로직에서는 한 번만 호출
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
             UUID orderId = savedOrderId();
             verify(orderTransactionService).failCreate(orderId, false);
         }
@@ -694,7 +700,7 @@ class OrderServiceTest {
             verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
             //취소되지 않은 배송은 삭제할 수 없으므로 삭제는 시도하지 않음
             verify(deliveryServiceClient, never()).deleteDeliveryByOrderId(any());
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
             verify(orderTransactionService).failCreate(orderId, false);
         }
 
@@ -707,7 +713,7 @@ class OrderServiceTest {
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
         }
     }
 
@@ -806,7 +812,7 @@ class OrderServiceTest {
             });
             given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId()))
                     .willReturn(new CancelDeliveryResponse(order.getId(), deliveryId, "CANCELLED"));
-            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity)).willReturn("OK");
+            given(hubServiceClient.restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), eq(order.getId()))).willReturn(new StockResponse());
             return order;
         }
 
@@ -857,7 +863,7 @@ class OrderServiceTest {
 
                 //then
                 inOrder.verify(deliveryServiceClient).cancelDeliveryByOrderId(order.getId());
-                inOrder.verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+                inOrder.verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), eq(order.getId()));
             }
 
             @Test
@@ -865,7 +871,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
-                given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity)).willThrow(feignException());
+                given(hubServiceClient.restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), eq(order.getId()))).willThrow(feignException());
 
                 //when
                 CancelOrderResponse response = orderService.cancelOrderById(order.getId());
@@ -976,7 +982,7 @@ class OrderServiceTest {
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
                 verify(orderTransactionService).revertCancel(order.getId());
                 //출발한 배송은 취소되지 않았으므로 재고도 복원하지 않음
-                verify(hubServiceClient, never()).restoreStock(any(), any(), any());
+                verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
             }
 
             @Test
