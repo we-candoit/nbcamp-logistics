@@ -24,7 +24,7 @@ services:
     volumes:
       - ./services/user-service:/app
       - *entrypoint-spring
-    profiles: ["user"]
+    profiles: ["user", "app"]
 
   order-service:
     <<: *common-spring
@@ -34,7 +34,7 @@ services:
     volumes:
       - ./services/order-service:/app
       - *entrypoint-spring
-    profiles: ["order"]
+    profiles: ["order", "app"]
 
   delivery-service:
     <<: *common-spring
@@ -44,7 +44,7 @@ services:
     volumes:
       - ./services/delivery-service:/app
       - *entrypoint-spring
-    profiles: ["delivery"]
+    profiles: ["delivery", "app"]
 
   hub-service:
     <<: *common-spring
@@ -54,7 +54,7 @@ services:
     volumes:
       - ./services/hub-service:/app
       - *entrypoint-spring
-    profiles: ["hub"]
+    profiles: ["hub", "app"]
 
   company-service:
     <<: *common-spring
@@ -64,7 +64,7 @@ services:
     volumes:
       - ./services/company-service:/app
       - *entrypoint-spring
-    profiles: ["company"]
+    profiles: ["company", "app"]
 
 
   #######################
@@ -104,11 +104,24 @@ services:
     volumes:
       - volume-db:/var/lib/postgresql/data
       - ./infra/db-server/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports: ["5433:5432"]
     networks:
       - logistics-network
     restart: always
     init: true
-    profiles: ["infra"]
+    profiles: ["infra", "db"]
+
+  db-seeder:
+    container_name: db-seeder
+    image: postgres:16-alpine
+    env_file: ./logistics-envs/db-server.env
+    volumes:
+      - ./infra/db-server/seed.sh:/seed/seed.sh:ro
+      - ./infra/db-server/mock_data.sql:/seed/mock_data.sql:ro
+    entrypoint: ["sh", "/seed/seed.sh"]
+    networks: [logistics-network]
+    restart: "no"
+    profiles: ["data-init"]
 
 
 networks:
