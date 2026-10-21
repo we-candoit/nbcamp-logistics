@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -54,6 +55,8 @@ class FeignRetryTest {
                 os.write(body);
             }
         });
+        //요청마다 별도 스레드에서 처리 / 단일 스레드면 타임아웃 케이스에서 재시도 요청이 이전 요청 처리가 끝날 때까지 대기
+        server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
         client = Feign.builder()
