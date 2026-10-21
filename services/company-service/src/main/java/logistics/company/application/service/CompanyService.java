@@ -5,6 +5,7 @@ import logistics.company.infrastructure.client.HubClient;
 import logistics.company.infrastructure.client.UserClient;
 import logistics.company.infrastructure.client.dto.UserAffiliationUpdateRequest;
 import logistics.company.infrastructure.client.dto.UserResponse;
+import logistics.company.infrastructure.repository.CompanyItemRepository;
 import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.infrastructure.repository.CompanySpecification;
 import logistics.company.presentation.dto.request.company.CompanyCreateRequest;
@@ -28,6 +29,7 @@ import java.util.*;
 public class CompanyService {
 
     private final CompanyRepository companyRepository;
+    private final CompanyItemRepository companyItemRepository;
     private final HubClient hubClient;
     private final UserClient userClient;
 
@@ -177,6 +179,7 @@ public class CompanyService {
         return CompanyBulkResponse.of(responses, notFoundIds);
     }
 
+    @Transactional
     public void deleteCompany(UUID companyId, UUID userId, String role) {
         // 1. 삭제할 업체 존재 확인
         Company company = companyRepository.findById(companyId)
@@ -189,5 +192,8 @@ public class CompanyService {
 
         // 3. 논리적 삭제(soft delete: deleted_at, deleted_by 기록)
         company.delete(userId);
+
+        // 4. 업체 소속 상품 연쇄 논리 삭제 (쿼리 1번으로 수행, 업체와 같은 삭제 시각 기록, 같은 트랜잭션이라 실패 시 함께 롤백)
+        companyItemRepository.softDeleteAllByCompanyId(companyId, userId, company.getDeletedAt());
     }
 }
