@@ -12,6 +12,7 @@ import logistics.delivery.infrastructure.repository.DeliveryRouteRepository;
 import logistics.delivery.presentation.dto.request.DeliveryCreateRequest;
 import logistics.delivery.presentation.dto.response.DeliveryCreateResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,7 @@ public class DeliveryCreationTransactionService {
     private final DeliveryOrderControlManager controlManager;
     private final DeliveryRepository deliveryRepository;
     private final DeliveryRouteRepository deliveryRouteRepository;
+    private final ObjectProvider<DeliveryDemoService> demoService;
 
     /**
      * 관리 기록을 잠그고 배송 생성 가능 여부와 기존 배송을 확인
@@ -88,6 +90,7 @@ public class DeliveryCreationTransactionService {
 
         Delivery delivery = request.toEntity();
         List<DeliveryRoute> routes = createRoutes(delivery, hubRoute);
+        demoService.ifAvailable(demo -> demo.assignManagers(delivery, routes));
 
         deliveryRepository.save(delivery);
         deliveryRouteRepository.saveAll(routes);

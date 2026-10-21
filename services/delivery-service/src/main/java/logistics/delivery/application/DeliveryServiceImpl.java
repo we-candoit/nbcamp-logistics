@@ -22,6 +22,7 @@ import logistics.delivery.presentation.dto.request.DeliverySearchRequest;
 import logistics.delivery.presentation.dto.request.DeliveryStatusUpdateRequest;
 import logistics.delivery.presentation.dto.response.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -46,6 +47,7 @@ public class DeliveryServiceImpl implements DeliveryService{
     private final DeliveryOrderControlManager controlManager;
     private final DeliveryCompensationTransactionService compensationTransactionService;
     private final DeliveryCreationTransactionService creationTransactionService;
+    private final ObjectProvider<DeliveryDemoService> demoService;
 
     /**
      * 배송 목록 조회 및 검색
@@ -389,6 +391,7 @@ public class DeliveryServiceImpl implements DeliveryService{
 
         if (changed) {
             delivery.updateStatusByRoute(route.getType(), route.getStatus());
+            demoService.ifAvailable(demo -> demo.recordActualMetrics(route));
         }
 
         return DeliveryStatusUpdateResponse.from(delivery, route);
