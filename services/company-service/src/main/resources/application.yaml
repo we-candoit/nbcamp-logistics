@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: company-service
+  datasource:
+    url: jdbc:postgresql://${DB_SERVER_NAME}:${DB_SERVER_PORT}/${POSTGRES_DB}?currentSchema=${DB_SCHEMA}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update                # 엔티티 기준으로 테이블 생성·변경 (개발용)
+    properties:
+      hibernate:
+        default_schema: ${DB_SCHEMA}
+    defer-datasource-initialization: true   # Hibernate가 테이블 만든 뒤 schema.sql 실행
+  sql:
+    init:
+      mode: always                    # PostgreSQL 같은 외부 DB에서도 schema.sql 실행
+
+  web:
+    error:
+      include-message: always         # 응답에 에러 메시지 포함
+      include-binding-errors: always  # @Valid 실패 시 필드별 오류 포함
+  data:
+    web:
+      pageable:
+        max-page-size: 50
+
+server:
+  port: ${DISCOVERY_SERVER_PORT}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${DISCOVERY_SERVER_NAME}:${DISCOVERY_SERVER_PORT}/eureka/

@@ -9,13 +9,13 @@ x-common-spring: &common-spring
   networks: [logistics-network]
 
 x-entrypoint-spring: &entrypoint-spring
-  "./entrypoint.sh:/entrypoint.sh:ro"
+                       "./entrypoint.sh:/entrypoint.sh:ro"
 
 
 services:
-#############################
-######   비즈니스 서비스   ######
-#############################
+  #############################
+  ######   비즈니스 서비스   ######
+  #############################
   user-service:
     <<: *common-spring
     container_name: user-service
@@ -67,9 +67,9 @@ services:
     profiles: ["company"]
 
 
-#######################
-######   인프라    ######
-#######################
+  #######################
+  ######   인프라    ######
+  #######################
   eureka-server:
     <<: *common-spring
     container_name: eureka-server
@@ -94,9 +94,9 @@ services:
     profiles: ["gateway", "infra"]
 
 
-###########################
-######   데이터베이스   ######
-###########################
+  ###########################
+  ######   데이터베이스   ######
+  ###########################
   db-server:
     container_name: db-server
     image: postgres:16-alpine
@@ -105,7 +105,7 @@ services:
       - volume-db:/var/lib/postgresql/data
       - ./infra/db-server/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
-        - logistics-network
+      - logistics-network
     restart: always
     init: true
     profiles: ["infra"]

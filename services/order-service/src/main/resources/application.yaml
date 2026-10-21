@@ -7,6 +7,24 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+  jpa:
+    hibernate:
+      ddl-auto: update # 개발 환경 설정
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        show_sql: true
+
+  cloud:
+    openfeign:
+      client:
+        config:
+          #모든 Feign 클라이언트 공통 / 연결 3초, 응답대기 5초
+          default:
+            connect-timeout: 3000
+            read-timeout: 5000
+
 eureka:
   client:
     service-url:
