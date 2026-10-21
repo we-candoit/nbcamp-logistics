@@ -54,6 +54,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class CompanyItemSearchIntegrationTest {
 
     private static final Pageable PAGEABLE = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+    private static final UUID AUDITOR = UUID.randomUUID() ;
 
     @Autowired
     private CompanyItemService companyItemService;
@@ -69,7 +70,7 @@ class CompanyItemSearchIntegrationTest {
     @MockitoBean
     private UserClient userClient;
     @MockitoBean
-    private AuditorAware<String> auditorAware;
+    private AuditorAware<UUID> auditorAware;
 
     private Company seafood;       // 스파르타수산
     private Company dried;         // 한국건어물
@@ -78,7 +79,7 @@ class CompanyItemSearchIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        given(auditorAware.getCurrentAuditor()).willReturn(Optional.of("tester"));
+        given(auditorAware.getCurrentAuditor()).willReturn(Optional.of(AUDITOR));
 
         seafood = saveCompany("스파르타수산");
         dried = saveCompany("한국건어물");
@@ -89,7 +90,7 @@ class CompanyItemSearchIntegrationTest {
 
         // 삭제된 상품: 모든 검색에서 제외되어야 함
         CompanyItem deleted = saveItem(dried, "삭제된오징어", 1000L, "국산");
-        deleted.delete("tester");
+        deleted.delete(AUDITOR);
         companyItemRepository.saveAndFlush(deleted);
     }
 
@@ -219,7 +220,7 @@ class CompanyItemSearchIntegrationTest {
     @DisplayName("상세 조회: 삭제된 상품은 404")
     void getItem_deleted() {
         CompanyItem deleted = saveItem(seafood, "곧삭제", 1000L, null);
-        deleted.delete("tester");
+        deleted.delete(AUDITOR);
         companyItemRepository.saveAndFlush(deleted);
 
         assertThatThrownBy(() -> companyItemService.getItem(deleted.getId()))

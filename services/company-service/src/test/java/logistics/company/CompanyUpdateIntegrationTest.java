@@ -52,8 +52,8 @@ class CompanyUpdateIntegrationTest {
 
     private static final String MASTER = "MASTER";
     private static final String USER = "USER";
-    private static final String CREATOR = "creator-id";
-    private static final String EDITOR = "editor-id";
+    private static final UUID CREATOR = UUID.randomUUID();
+    private static final UUID EDITOR = UUID.randomUUID();
 
     private static final String NAME = "스파르타수산";
     private static final String ADDRESS = "독도";
@@ -71,7 +71,7 @@ class CompanyUpdateIntegrationTest {
     @MockitoBean
     private UserClient userClient;
     @MockitoBean
-    private AuditorAware<String> auditorAware;
+    private AuditorAware<UUID> auditorAware;
 
     private UUID hubId;
     private UUID managerId;
@@ -128,7 +128,7 @@ class CompanyUpdateIntegrationTest {
                 saved.getId(), managerId, USER, request(newHubId, NEW_NAME, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.COMPANY_UPDATE_FORBIDDEN);
+                .isEqualTo(ErrorCode.COMPANY_FORBIDDEN);
 
         Company reloaded = reload();
         assertThat(reloaded.getName()).isEqualTo(NAME);
@@ -187,7 +187,7 @@ class CompanyUpdateIntegrationTest {
         return companyRepository.findById(saved.getId()).orElseThrow();
     }
 
-    private void givenAuditor(String auditor) {
+    private void givenAuditor(UUID auditor) {
         given(auditorAware.getCurrentAuditor()).willReturn(Optional.of(auditor));
     }
 

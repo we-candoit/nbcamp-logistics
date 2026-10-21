@@ -54,4 +54,8 @@ public class CompanyItem extends BaseEntity {
     public void changeDescription(String description) {
         this.description = description;
     }
+
+    public boolean isManagedBy(UUID userId) {
+        return this.company.getManagerUserId().equals(userId);
+    }
 }
