@@ -620,22 +620,7 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 보상이_한번_실패해도_재시도에_성공하면_FAILED로_변경한다() {
-            //given
-            given(deliveryServiceClient.createDelivery(any())).willThrow(feignException());
-            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity))
-                    .willThrow(feignException())
-                    .willReturn("OK");
-
-            //when, then
-            assertThatThrownBy(() -> orderService.create(orderRequest())).isInstanceOf(FeignException.class);
-            verify(hubServiceClient, times(2)).restoreStock(supplierHubId, itemId, quantity);
-            UUID orderId = savedOrderId();
-            verify(orderTransactionService).failCreate(orderId, true);
-        }
-
-        @Test
-        public void 재시도까지_실패하면_COMPENSATION_FAILED로_변경하고_원래_예외를_전달한다() {
+        public void 보상에_실패하면_COMPENSATION_FAILED로_변경하고_원래_예외를_전달한다() {
             //given
             FeignException deliveryError = feignException();
             given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
@@ -645,7 +630,8 @@ class OrderServiceTest {
             //when, then
             //보상 예외가 아닌 원래 실패 원인이 전달되어야 함
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
-            verify(hubServiceClient, times(2)).restoreStock(supplierHubId, itemId, quantity);
+            //외부 호출 재시도는 Feign Retryer 담당이라 보상 로직에서는 한 번만 호출
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
             UUID orderId = savedOrderId();
             verify(orderTransactionService).failCreate(orderId, false);
         }
@@ -659,7 +645,7 @@ class OrderServiceTest {
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isInstanceOf(RuntimeException.class);
-            verify(deliveryServiceClient, times(2)).cancelDelivery(deliveryId);
+            verify(deliveryServiceClient).cancelDelivery(deliveryId);
             //취소되지 않은 배송은 삭제할 수 없으므로 삭제는 시도하지 않음
             verify(deliveryServiceClient, never()).deleteDelivery(any());
             verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);

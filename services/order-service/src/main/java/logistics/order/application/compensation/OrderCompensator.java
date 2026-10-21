@@ -10,11 +10,13 @@ import java.util.UUID;
 
 //주문 보상시나리오 / 외부 서비스 호출 실패시 앞서 처리한 단계를 되돌림
 //보상 중 예외는 원래 실패 원인을 가리지 않도록 밖으로 던지지 않음
+//외부 서비스 보상 호출의 재시도는 Feign Retryer가 담당, DB 복구만 여기서 재시도
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class OrderCompensator {
 
+    //DB 복구 시도 횟수 / 실패시 1회 재시도
     private static final int MAX_ATTEMPTS = 2;
 
     private final ClientService clientService;
@@ -44,17 +46,28 @@ public class OrderCompensator {
         if (progress.isDeliveryCreated()) {
             UUID deliveryId = progress.getDeliveryId();
             //배송은 취소된 상태에서만 삭제 가능
-            compensated &= retry(orderId, "배송취소", () -> clientService.cancelDelivery(deliveryId))
-                    && retry(orderId, "배송삭제", () -> clientService.deleteDelivery(deliveryId));
+            compensated &= compensate(orderId, "배송취소", () -> clientService.cancelDelivery(deliveryId))
+                    && compensate(orderId, "배송삭제", () -> clientService.deleteDelivery(deliveryId));
         }
         if (progress.isStockDecreased()) {
-            compensated &= retry(orderId, "재고복구", () -> clientService.restoreStock(
+            compensated &= compensate(orderId, "재고복구", () -> clientService.restoreStock(
                     progress.getHubId(), progress.getItemId(), progress.getQuantity()));
         }
         return compensated;
     }
 
-    //보상 실패시 1회 재시도
+    //외부 서비스 보상 호출 / 재시도는 Feign Retryer에서 끝난 상태라 실패하면 최종 실패
+    private boolean compensate(UUID orderId, String action, Runnable compensation) {
+        try {
+            compensation.run();
+            return true;
+        } catch (RuntimeException e) {
+            log.error("주문 보상 최종 실패 orderId={} action={}", orderId, action, e);
+            return false;
+        }
+    }
+
+    //DB 복구 실패시 1회 재시도
     private boolean retry(UUID orderId, String action, Runnable compensation) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
