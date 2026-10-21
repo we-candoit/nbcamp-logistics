@@ -48,7 +48,7 @@ public class OrderCompensator {
         }
         if (progress.isStockDecreased()) {
             compensated &= compensate(orderId, "재고복구", () -> clientService.restoreStock(
-                    progress.getHubId(), progress.getItemId(), progress.getQuantity()));
+                    progress.getHubId(), progress.getItemId(), progress.getQuantity(), orderId));
         }
         return compensated;
     }

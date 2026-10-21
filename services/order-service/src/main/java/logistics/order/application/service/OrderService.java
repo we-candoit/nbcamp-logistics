@@ -38,8 +38,8 @@ public class OrderService {
         CreateOrderProgress progress = CreateOrderProgress.start(orderItem);
 
         try {
-            //재고감소
-            clientService.decreaseStock(orderItem.getDepartureHubId(), orderItem.getItemId(), orderItem.getQuantity());
+            //재고감소 / 주문ID로 hub-service에서 중복 차감 방지
+            clientService.decreaseStock(orderItem.getDepartureHubId(), orderItem.getItemId(), orderItem.getQuantity(), order.getId());
             progress.markStockDecreased();
 
             //배송생성
@@ -118,7 +118,8 @@ public class OrderService {
     //현재는 관리자가 로그로 확인 후 수동으로 재고를 맞춤 (추후 스케줄러/비동기 재처리 도입 예정)
     private void restoreStockForCancel(OrderItem orderItem) {
         try {
-            clientService.restoreStock(orderItem.getDepartureHubId(), orderItem.getItemId(), orderItem.getQuantity());
+            clientService.restoreStock(orderItem.getDepartureHubId(), orderItem.getItemId(), orderItem.getQuantity(),
+                    orderItem.getOrder().getId());
         } catch (RuntimeException e) {
             log.error("주문취소 재고복원 실패, 수동 처리 필요 orderId={} hubId={} itemId={} quantity={}",
                     orderItem.getOrder().getId(), orderItem.getDepartureHubId(),
