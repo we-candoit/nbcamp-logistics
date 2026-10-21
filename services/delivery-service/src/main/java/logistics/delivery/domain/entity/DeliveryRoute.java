@@ -130,5 +130,27 @@ public class DeliveryRoute extends BaseEntity {
         return true;
     }
 
+    /**
+     * 도착한 배송 경로에 아직 없는 거리와 시간 실적만 기록
+     *
+     * @param distance 거리(km)
+     * @param duration 시간(분)
+     */
+    public void recordActualMetricsIfAbsent(BigDecimal distance, Integer duration) {
+        if (status != DeliveryRouteStatus.ARRIVED) {
+            throw new DeliveryException(DeliveryErrorCode.INVALID_ROUTE_STATUS_TRANSITION);
+        }
+        if (distance == null || distance.signum() < 0 || duration == null || duration < 0) {
+            throw new DeliveryException(DeliveryErrorCode.INVALID_PARAMETER);
+        }
+
+        if (actualDistance == null) {
+            actualDistance = distance;
+        }
+        if (actualDuration == null) {
+            actualDuration = duration;
+        }
+    }
+
 
 }
