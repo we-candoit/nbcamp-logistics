@@ -536,6 +536,8 @@ class OrderServiceTest {
             loginAs("MASTER");
             givenExternalApisSucceed();
             given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity)).willReturn("OK");
+            given(deliveryServiceClient.cancelDeliveryByOrderId(any()))
+                    .willAnswer(invocation -> new CancelDeliveryResponse(invocation.getArgument(0), deliveryId, "CANCELLED"));
         }
 
         //WAITING 저장 시점에 생성된 주문ID
@@ -583,8 +585,6 @@ class OrderServiceTest {
             UUID orderId = savedOrderId();
             verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
             verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
-            verify(deliveryServiceClient, never()).cancelDelivery(any());
-            verify(deliveryServiceClient, never()).deleteDelivery(any());
             verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
             verify(orderTransactionService).failCreate(orderId, true);
         }
@@ -760,8 +760,8 @@ class OrderServiceTest {
                 order.cancel();
                 return order;
             });
-            given(deliveryServiceClient.cancelDelivery(deliveryId))
-                    .willReturn(new CancelDeliveryResponse(deliveryId, "CANCELLED"));
+            given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId()))
+                    .willReturn(new CancelDeliveryResponse(order.getId(), deliveryId, "CANCELLED"));
             return order;
         }
 
@@ -782,7 +782,7 @@ class OrderServiceTest {
                 assertThat(response.getOrderId()).isEqualTo(order.getId());
                 assertThat(response.getDeliveryId()).isEqualTo(deliveryId);
                 assertThat(response.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-                verify(deliveryServiceClient).cancelDelivery(deliveryId);
+                verify(deliveryServiceClient).cancelDeliveryByOrderId(order.getId());
             }
 
             @Test
@@ -797,7 +797,23 @@ class OrderServiceTest {
 
                 //then
                 inOrder.verify(orderTransactionService).cancel(order.getId());
-                inOrder.verify(deliveryServiceClient).cancelDelivery(deliveryId);
+                inOrder.verify(deliveryServiceClient).cancelDeliveryByOrderId(order.getId());
+            }
+
+            @Test
+            public void 배송이_없어_생성이_차단되어도_주문은_취소된다() {
+                //given
+                loginAs("MASTER");
+                Order order = givenCancelableOrder();
+                given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId()))
+                        .willReturn(new CancelDeliveryResponse(order.getId(), null, "CREATION_BLOCKED"));
+
+                //when
+                CancelOrderResponse response = orderService.cancelOrderById(order.getId());
+
+                //then
+                assertThat(response.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+                verify(orderTransactionService, never()).revertCancel(any());
             }
 
             @Test
@@ -876,7 +892,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
-                given(deliveryServiceClient.cancelDelivery(deliveryId))
+                given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId()))
                         .willThrow(new FeignException.Conflict("출발 전 배송만 취소할 수 있습니다.", request, null, null));
 
                 //when, then
@@ -890,7 +906,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
-                given(deliveryServiceClient.cancelDelivery(deliveryId))
+                given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId()))
                         .willThrow(new FeignException.NotFound("해당 배송을 찾을 수 없습니다.", request, null, null));
 
                 //when, then
@@ -900,12 +916,12 @@ class OrderServiceTest {
             }
 
             @Test
-            public void 배송취소_응답상태가_CANCELLED가_아니면_취소불가_예외가_발생하고_주문을_복구한다() {
+            public void 배송취소_응답결과가_취소가_아니면_취소불가_예외가_발생하고_주문을_복구한다() {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
-                given(deliveryServiceClient.cancelDelivery(deliveryId))
-                        .willReturn(new CancelDeliveryResponse(deliveryId, "HUB_IN_TRANSIT"));
+                given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId()))
+                        .willReturn(new CancelDeliveryResponse(order.getId(), deliveryId, "UNKNOWN"));
 
                 //when, then
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
@@ -918,7 +934,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
-                given(deliveryServiceClient.cancelDelivery(deliveryId)).willThrow(feignException());
+                given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId())).willThrow(feignException());
 
                 //when, then
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
@@ -931,7 +947,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
-                given(deliveryServiceClient.cancelDelivery(deliveryId))
+                given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId()))
                         .willThrow(new RetryableException(-1, "Read timed out", Request.HttpMethod.POST, (Long) null, request));
 
                 //when, then
@@ -945,7 +961,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
-                given(deliveryServiceClient.cancelDelivery(deliveryId))
+                given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId()))
                         .willThrow(new IllegalStateException("circuit open"));
 
                 //when, then
@@ -959,7 +975,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
-                given(deliveryServiceClient.cancelDelivery(deliveryId)).willThrow(feignException());
+                given(deliveryServiceClient.cancelDeliveryByOrderId(order.getId())).willThrow(feignException());
                 willThrow(new RuntimeException("DB 오류")).given(orderTransactionService).revertCancel(order.getId());
 
                 //when, then
@@ -1004,7 +1020,7 @@ class OrderServiceTest {
 
                 //then
                 verify(orderTransactionService).delete(order.getId(), userId);
-                verify(deliveryServiceClient).deleteDelivery(deliveryId);
+                verify(deliveryServiceClient).deleteDeliveryByOrderId(order.getId());
             }
 
             @Test
@@ -1019,7 +1035,7 @@ class OrderServiceTest {
 
                 //then
                 inOrder.verify(orderTransactionService).delete(order.getId(), userId);
-                inOrder.verify(deliveryServiceClient).deleteDelivery(deliveryId);
+                inOrder.verify(deliveryServiceClient).deleteDeliveryByOrderId(order.getId());
             }
 
             @Test
@@ -1099,7 +1115,7 @@ class OrderServiceTest {
                 loginAs("MASTER");
                 Order order = givenDeletableOrder();
                 willThrow(new FeignException.Conflict("취소된 배송만 삭제할 수 있습니다.", request, null, null))
-                        .given(deliveryServiceClient).deleteDelivery(deliveryId);
+                        .given(deliveryServiceClient).deleteDeliveryByOrderId(order.getId());
 
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
@@ -1113,7 +1129,7 @@ class OrderServiceTest {
                 loginAs("MASTER");
                 Order order = givenDeletableOrder();
                 willThrow(new FeignException.NotFound("해당 배송을 찾을 수 없습니다.", request, null, null))
-                        .given(deliveryServiceClient).deleteDelivery(deliveryId);
+                        .given(deliveryServiceClient).deleteDeliveryByOrderId(order.getId());
 
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
@@ -1126,7 +1142,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 Order order = givenDeletableOrder();
-                willThrow(feignException()).given(deliveryServiceClient).deleteDelivery(deliveryId);
+                willThrow(feignException()).given(deliveryServiceClient).deleteDeliveryByOrderId(order.getId());
 
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
@@ -1140,7 +1156,7 @@ class OrderServiceTest {
                 loginAs("MASTER");
                 Order order = givenDeletableOrder();
                 willThrow(new RetryableException(-1, "Read timed out", Request.HttpMethod.DELETE, (Long) null, request))
-                        .given(deliveryServiceClient).deleteDelivery(deliveryId);
+                        .given(deliveryServiceClient).deleteDeliveryByOrderId(order.getId());
 
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
@@ -1154,7 +1170,7 @@ class OrderServiceTest {
                 loginAs("MASTER");
                 Order order = givenDeletableOrder();
                 willThrow(new IllegalStateException("circuit open"))
-                        .given(deliveryServiceClient).deleteDelivery(deliveryId);
+                        .given(deliveryServiceClient).deleteDeliveryByOrderId(order.getId());
 
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
@@ -1167,7 +1183,7 @@ class OrderServiceTest {
                 //given
                 loginAs("MASTER");
                 Order order = givenDeletableOrder();
-                willThrow(feignException()).given(deliveryServiceClient).deleteDelivery(deliveryId);
+                willThrow(feignException()).given(deliveryServiceClient).deleteDeliveryByOrderId(order.getId());
                 willThrow(new RuntimeException("DB 오류")).given(orderTransactionService).revertDelete(order.getId());
 
                 //when, then

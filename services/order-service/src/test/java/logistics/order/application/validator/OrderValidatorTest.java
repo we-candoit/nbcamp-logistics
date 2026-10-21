@@ -222,11 +222,12 @@ class OrderValidatorTest {
         @DisplayName("정상 케이스")
         class Success {
 
-            @Test
-            public void 배송상태가_CANCELLED면_통과한다() {
+            @ParameterizedTest
+            @ValueSource(strings = {"CANCELLED", "CREATION_BLOCKED"})
+            public void 배송취소_결과가_CANCELLED_또는_CREATION_BLOCKED면_통과한다(String result) {
                 //when, then
                 assertThatCode(() -> orderValidator.validateDeliveryCanceled(
-                        new CancelDeliveryResponse(UUID.randomUUID(), "CANCELLED")))
+                        new CancelDeliveryResponse(UUID.randomUUID(), null, result)))
                         .doesNotThrowAnyException();
             }
         }
@@ -236,11 +237,11 @@ class OrderValidatorTest {
         class Failure {
 
             @ParameterizedTest
-            @ValueSource(strings = {"WAITING", "HUB_IN_TRANSIT", "CANCELED"})
-            public void 배송상태가_CANCELLED가_아니면_C409_ORDER_NOT_CANCELABLE_예외가_발생한다(String status) {
+            @ValueSource(strings = {"WAITING", "CANCELED", "cancelled"})
+            public void 배송취소_결과가_CANCELLED_CREATION_BLOCKED가_아니면_C409_ORDER_NOT_CANCELABLE_예외가_발생한다(String result) {
                 //when, then
                 assertThatThrownBy(() -> orderValidator.validateDeliveryCanceled(
-                        new CancelDeliveryResponse(UUID.randomUUID(), status)))
+                        new CancelDeliveryResponse(UUID.randomUUID(), null, result)))
                         .satisfies(e -> assertErrorCode(e, ErrorCode.C409_ORDER_NOT_CANCELABLE));
             }
 

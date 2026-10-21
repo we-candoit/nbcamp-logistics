@@ -61,35 +61,23 @@ public class ClientService {
 
     //재고 차감
     public void decreaseStock(UUID hubId, UUID itemId, Long quantity) {
-        try {
-            hubServiceClient.decreaseStock(hubId, itemId, quantity);
-        } catch (FeignException e) {
-            throw e;
-        }
+        hubServiceClient.decreaseStock(hubId, itemId, quantity);
     }
 
     //재고 복구
     public void restoreStock(UUID hubId, UUID itemId, Long quantity) {
-        try {
-            hubServiceClient.restoreStock(hubId, itemId, quantity);
-        } catch (FeignException e) {
-            throw e;
-        }
+        hubServiceClient.restoreStock(hubId, itemId, quantity);
     }
 
     //배송 생성
     public CreateDeliveryResponse createDelivery(CreateDeliveryRequest request) {
-        try {
-            return deliveryServiceClient.createDelivery(request);
-        } catch (FeignException e) {
-            throw e;
-        }
+        return deliveryServiceClient.createDelivery(request);
     }
 
-    //배송취소 요청 / 배송이 취소되지 않으면 주문도 취소 불가
-    public void cancelDelivery(UUID deliveryId) {
+    //주문ID로 배송취소 요청 / 배송이 취소되지 않으면 주문도 취소 불가
+    public void cancelDeliveryByOrderId(UUID orderId) {
         try {
-            CancelDeliveryResponse response = deliveryServiceClient.cancelDelivery(deliveryId);
+            CancelDeliveryResponse response = deliveryServiceClient.cancelDeliveryByOrderId(orderId);
             orderValidator.validateDeliveryCanceled(response);
         } catch (FeignException e) {
             //배송 서비스가 4xx로 응답 (409 이미 출발한 배송, 404 배송 없음 등) → 취소 불가
@@ -104,10 +92,10 @@ public class ClientService {
         }
     }
 
-    //배송삭제 요청 / 배송이 삭제되지 않으면 주문도 삭제 불가
-    public void deleteDelivery(UUID deliveryId) {
+    //주문ID로 배송삭제 요청 / 배송이 삭제되지 않으면 주문도 삭제 불가
+    public void deleteDeliveryByOrderId(UUID orderId) {
         try {
-            deliveryServiceClient.deleteDelivery(deliveryId);
+            deliveryServiceClient.deleteDeliveryByOrderId(orderId);
         } catch (FeignException e) {
             //배송 서비스가 4xx로 응답 (409 취소되지 않은 배송, 404 배송 없음 등) → 삭제 불가
             if (e.status() == 404) {
@@ -119,16 +107,6 @@ public class ClientService {
             //응답 없음(-1), 5xx는 전역 처리기로 전달
             throw e;
         }
-    }
-
-    //주문ID로 배송취소 (보상처리용) / 실패 처리는 보상 로직에서 담당
-    public void cancelDeliveryByOrderId(UUID orderId) {
-        deliveryServiceClient.cancelDeliveryByOrderId(orderId);
-    }
-
-    //주문ID로 배송삭제 (보상처리용) / 실패 처리는 보상 로직에서 담당
-    public void deleteDeliveryByOrderId(UUID orderId) {
-        deliveryServiceClient.deleteDeliveryByOrderId(orderId);
     }
 
     //슬랙 DM 전송 / 알림 실패가 주문 처리 결과에 영향을 주지 않도록 예외는 로그만 남김

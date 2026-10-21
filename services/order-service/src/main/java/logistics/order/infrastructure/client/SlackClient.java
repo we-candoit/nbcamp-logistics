@@ -19,8 +19,9 @@ public class SlackClient {
     @Value("${SLACK_TOKEN}")
     private String slackToken;
 
-    //슬랙 응답이 늦어도 주문 처리가 오래 묶이지 않도록 연결/응답대기 시간 제한
-    private static final Duration TIMEOUT = Duration.ofSeconds(5);
+    //슬랙 응답이 늦어도 주문 처리가 오래 묶이지 않도록 연결 3초, 응답대기 5초로 제한
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(5);
 
     private final RestClient restClient = RestClient.builder()
             .baseUrl("https://slack.com/api")
@@ -29,8 +30,8 @@ public class SlackClient {
 
     private static SimpleClientHttpRequestFactory requestFactory() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(TIMEOUT);
-        factory.setReadTimeout(TIMEOUT);
+        factory.setConnectTimeout(CONNECT_TIMEOUT);
+        factory.setReadTimeout(READ_TIMEOUT);
         return factory;
     }
 

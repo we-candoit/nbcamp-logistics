@@ -85,7 +85,7 @@ public class OrderService {
         Order order = orderTransactionService.cancel(orderId);
 
         try {
-            clientService.cancelDelivery(order.getDeliveryId());
+            clientService.cancelDeliveryByOrderId(orderId);
         } catch (RuntimeException e) {
             //배송취소 실패시 주문상태 CONFIRMED로 복구하는 보상시나리오
             orderCompensator.compensateCancel(orderId);
@@ -97,10 +97,10 @@ public class OrderService {
 
     //주문ID로 주문삭제, 취소된(CANCELLED) 주문만 가능
     public void deleteOrderById(UUID orderId) {
-        Order order = orderTransactionService.delete(orderId, AuthContext.getUserId());
+        orderTransactionService.delete(orderId, AuthContext.getUserId());
 
         try {
-            clientService.deleteDelivery(order.getDeliveryId());
+            clientService.deleteDeliveryByOrderId(orderId);
         } catch (RuntimeException e) {
             //배송삭제 실패시 주문/주문상품 삭제를 되돌리는 보상시나리오
             orderCompensator.compensateDelete(orderId);

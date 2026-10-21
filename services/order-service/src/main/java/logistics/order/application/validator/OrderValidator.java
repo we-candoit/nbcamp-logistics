@@ -3,7 +3,7 @@ package logistics.order.application.validator;
 import logistics.order.common.AuthContext;
 import logistics.order.infrastructure.client.dto.CancelDeliveryResponse;
 import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
-import logistics.order.infrastructure.client.enums.DeliveryStatus;
+import logistics.order.infrastructure.client.enums.DeliveryCancelResult;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.common.exception.CustomException;
 import logistics.order.common.exception.ErrorCode;
@@ -46,11 +46,15 @@ public class OrderValidator {
         }
     }
 
-    //배송이 취소되었는가? / 배송 서비스의 취소 상태값은 CANCELLED
+    //배송이 취소되었는가? / 배송이 취소됐거나(CANCELLED) 배송이 없어 생성이 차단됐으면(CREATION_BLOCKED) 진행 중인 배송 없음
     public void validateDeliveryCanceled(CancelDeliveryResponse response) {
-        if (response == null ||
-                !DeliveryStatus.CANCELLED.name().equals(response.getStatus())) {
+        if (response == null || !isDeliveryCanceled(response.getResult())) {
             throw new CustomException(ErrorCode.C409_ORDER_NOT_CANCELABLE);
         }
+    }
+
+    private boolean isDeliveryCanceled(String result) {
+        return DeliveryCancelResult.CANCELLED.name().equals(result)
+                || DeliveryCancelResult.CREATION_BLOCKED.name().equals(result);
     }
 }
