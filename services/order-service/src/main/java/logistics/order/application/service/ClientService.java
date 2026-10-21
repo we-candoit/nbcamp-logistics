@@ -27,8 +27,8 @@ public class ClientService {
 
     //유저 조회 / 요청한 유저가 없으면 요청업체 소속을 확인할 수 없어 권한 없음
     //유저 서비스는 응답을 data로 감싸서 반환, data가 없으면 유저 정보를 확인할 수 없어 서버 오류
-    public FetchUserByIdResponse fetchUserById(UUID userId) {
-        UserApiResponse<FetchUserByIdResponse> response;
+    public FetchUserByIdResponse.UserData fetchUserById(UUID userId) {
+        FetchUserByIdResponse response;
         try {
             response = userServiceClient.fetchUserById(userId);
         } catch (FeignException.NotFound e) {
@@ -61,35 +61,23 @@ public class ClientService {
 
     //재고 차감
     public void decreaseStock(UUID hubId, UUID itemId, Long quantity) {
-        try {
-            hubServiceClient.decreaseStock(hubId, itemId, quantity);
-        } catch (FeignException e) {
-            throw e;
-        }
+        hubServiceClient.decreaseStock(hubId, itemId, quantity);
     }
 
     //재고 복구
     public void restoreStock(UUID hubId, UUID itemId, Long quantity) {
-        try {
-            hubServiceClient.restoreStock(hubId, itemId, quantity);
-        } catch (FeignException e) {
-            throw e;
-        }
+        hubServiceClient.restoreStock(hubId, itemId, quantity);
     }
 
     //배송 생성
     public CreateDeliveryResponse createDelivery(CreateDeliveryRequest request) {
-        try {
-            return deliveryServiceClient.createDelivery(request);
-        } catch (FeignException e) {
-            throw e;
-        }
+        return deliveryServiceClient.createDelivery(request);
     }
 
-    //배송취소 요청 / 배송이 취소되지 않으면 주문도 취소 불가
-    public void cancelDelivery(UUID deliveryId) {
+    //주문ID로 배송취소 요청 / 배송이 취소되지 않으면 주문도 취소 불가
+    public void cancelDeliveryByOrderId(UUID orderId) {
         try {
-            CancelDeliveryResponse response = deliveryServiceClient.cancelDelivery(deliveryId);
+            CancelDeliveryResponse response = deliveryServiceClient.cancelDeliveryByOrderId(orderId);
             orderValidator.validateDeliveryCanceled(response);
         } catch (FeignException e) {
             //배송 서비스가 4xx로 응답 (409 이미 출발한 배송, 404 배송 없음 등) → 취소 불가
@@ -104,10 +92,10 @@ public class ClientService {
         }
     }
 
-    //배송삭제 요청 / 배송이 삭제되지 않으면 주문도 삭제 불가
-    public void deleteDelivery(UUID deliveryId) {
+    //주문ID로 배송삭제 요청 / 배송이 삭제되지 않으면 주문도 삭제 불가
+    public void deleteDeliveryByOrderId(UUID orderId) {
         try {
-            deliveryServiceClient.deleteDelivery(deliveryId);
+            deliveryServiceClient.deleteDeliveryByOrderId(orderId);
         } catch (FeignException e) {
             //배송 서비스가 4xx로 응답 (409 취소되지 않은 배송, 404 배송 없음 등) → 삭제 불가
             if (e.status() == 404) {
@@ -122,7 +110,13 @@ public class ClientService {
     }
 
     //슬랙 DM 전송 / 알림 실패가 주문 처리 결과에 영향을 주지 않도록 예외는 로그만 남김
+    //슬랙 ID가 없는 유저는 전송하지 않음
     public void sendSlackDm(String slackUserId, String message) {
+        if (slackUserId == null || slackUserId.isBlank()) {
+            log.info("슬랙 ID가 없어 DM 전송 생략");
+            return;
+        }
+
         try {
             slackClient.sendDm(slackUserId, message);
         } catch (RuntimeException e) {

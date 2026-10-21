@@ -30,7 +30,7 @@ public class OrderService {
     //주문생성
     public CreateOrderResponse create(CreateOrderRequest request) {
 
-        FetchUserByIdResponse user = clientService.fetchUserById(AuthContext.getUserId());
+        FetchUserByIdResponse.UserData user = clientService.fetchUserById(AuthContext.getUserId());
         OrderItem orderItem = prepareCreateOrder(request, user);
         Order order = orderItem.getOrder();
         CreateOrderProgress progress = CreateOrderProgress.start(orderItem);
@@ -41,22 +41,22 @@ public class OrderService {
             progress.markStockDecreased();
 
             //배송생성
+            progress.markDeliveryRequested();
             CreateDeliveryResponse delivery = clientService.createDelivery(
                     CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
             );
-            progress.markDeliveryCreated(delivery.getDeliveryId());
 
             //주문확정 / CONFIRMED 상태
             order.confirm(delivery.getDeliveryId());
             orderTransactionService.save(order, orderItem);
         } catch (RuntimeException e) {
             orderCompensator.compensateCreate(progress);
-            clientService.sendSlackDm("U0CA7AA95M5", "주문실패");
+            clientService.sendSlackDm(user.getSlackId(), orderMessage("주문 실패", orderItem));
             throw e;
         }
 
         //Slack알림
-        clientService.sendSlackDm("U0CA7AA95M5", "주문성공");
+        clientService.sendSlackDm(user.getSlackId(), orderMessage("주문 완료", orderItem));
 
         return CreateOrderResponse.from(orderItem);
     }
@@ -85,7 +85,7 @@ public class OrderService {
         Order order = orderTransactionService.cancel(orderId);
 
         try {
-            clientService.cancelDelivery(order.getDeliveryId());
+            clientService.cancelDeliveryByOrderId(orderId);
         } catch (RuntimeException e) {
             //배송취소 실패시 주문상태 CONFIRMED로 복구하는 보상시나리오
             orderCompensator.compensateCancel(orderId);
@@ -97,10 +97,10 @@ public class OrderService {
 
     //주문ID로 주문삭제, 취소된(CANCELLED) 주문만 가능
     public void deleteOrderById(UUID orderId) {
-        Order order = orderTransactionService.delete(orderId, AuthContext.getUserId());
+        orderTransactionService.delete(orderId, AuthContext.getUserId());
 
         try {
-            clientService.deleteDelivery(order.getDeliveryId());
+            clientService.deleteDeliveryByOrderId(orderId);
         } catch (RuntimeException e) {
             //배송삭제 실패시 주문/주문상품 삭제를 되돌리는 보상시나리오
             orderCompensator.compensateDelete(orderId);
@@ -108,7 +108,12 @@ public class OrderService {
         }
     }
 
-    private OrderItem prepareCreateOrder(CreateOrderRequest request, FetchUserByIdResponse user) {
+    //주문 알림 메시지 / ex) [주문 완료] 상품명: 생수 2L / 수량: 3개
+    private String orderMessage(String result, OrderItem orderItem) {
+        return "[%s] 상품명: %s / 수량: %d개".formatted(result, orderItem.getItemName(), orderItem.getQuantity());
+    }
+
+    private OrderItem prepareCreateOrder(CreateOrderRequest request, FetchUserByIdResponse.UserData user) {
         orderValidator.validateNotSameCompany(request.getRequesterId(), request.getSupplierId());
         orderValidator.validateUserBelongsToRequester(user.getCompanyId(), request.getRequesterId());
         FetchItemByIdResponse item = clientService.fetchItemById(request.getItemId());

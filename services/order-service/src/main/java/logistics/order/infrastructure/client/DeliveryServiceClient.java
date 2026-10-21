@@ -16,11 +16,12 @@ public interface DeliveryServiceClient {
     @PostMapping("/internal/deliveries")
     CreateDeliveryResponse createDelivery(CreateDeliveryRequest createDeliveryRequest);
 
-    @PostMapping("/internal/deliveries/{id}/cancel")
-    CancelDeliveryResponse cancelDelivery(@PathVariable("id") UUID deliveryId);
+    //주문ID로 배송취소 / 이미 취소된 배송이면 기존 결과 반환, 배송이 없으면 이후 배송생성을 차단
+    @PostMapping("/internal/deliveries/orders/{orderId}/cancel")
+    CancelDeliveryResponse cancelDeliveryByOrderId(@PathVariable("orderId") UUID orderId);
 
-    //성공 시 204 No Content / 이미 삭제된 배송이면 204 (멱등)
-    @DeleteMapping("/internal/deliveries/{id}")
-    void deleteDelivery(@PathVariable("id") UUID deliveryId);
+    //주문ID로 배송삭제 / 성공 및 이미 삭제된 경우 204, 취소된 배송 또는 생성 차단된 주문만 가능
+    @DeleteMapping("/internal/deliveries/orders/{orderId}")
+    void deleteDeliveryByOrderId(@PathVariable("orderId") UUID orderId);
 
 }
