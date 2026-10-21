@@ -586,17 +586,45 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 재고감소에_실패하면_보상없이_FAILED로_변경하고_원래_예외를_전달한다() {
+        public void 재고감소에_실패하면_원인과_관계없이_재고복원을_요청하고_원래_예외를_전달한다() {
             //given
-            FeignException stockError = feignException();
+            FeignException stockError = new FeignException.Conflict("재고가 부족합니다.", feignRequest(), null, null);
             willThrow(stockError).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
-            verifyNoInteractions(deliveryServiceClient);
-            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
             UUID orderId = savedOrderId();
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            verifyNoInteractions(deliveryServiceClient);
+        }
+
+        @Test
+        public void 재고감소가_타임아웃이어도_재고복원에_성공하면_FAILED로_변경한다() {
+            //given
+            //실제로는 차감됐지만 응답을 받지 못한 경우 → 복원 성공
+            RetryableException timeout = new RetryableException(-1, "Read timed out", Request.HttpMethod.POST, (Long) null, feignRequest());
+            willThrow(timeout).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(timeout);
+            UUID orderId = savedOrderId();
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
             verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 차감되지_않아_재고복원이_거절되면_COMPENSATION_FAILED로_변경한다() {
+            //given
+            FeignException stockError = new FeignException.Conflict("재고가 부족합니다.", feignRequest(), null, null);
+            willThrow(stockError).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
+            //차감 기록이 없는 복원은 hub-service에서 409
+            given(hubServiceClient.restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
+                    .willThrow(new FeignException.Conflict("해당 주문에 대한 재고 차감 기록이 없습니다.", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
+            UUID orderId = savedOrderId();
+            verify(orderTransactionService).failCreate(orderId, false);
         }
 
         @Test
