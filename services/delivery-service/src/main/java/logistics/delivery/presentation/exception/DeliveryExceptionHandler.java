@@ -76,6 +76,7 @@ public class DeliveryExceptionHandler {
 
             case DELETED_DELIVERY_RECREATION_NOT_ALLOWED,
                  DELIVERY_CREATION_CONFLICT,
+                 DELIVERY_CREATION_BLOCKED,
                  DELIVERY_CANCELLATION_NOT_ALLOWED,
                  DELIVERY_ROUTE_CANCELLATION_NOT_ALLOWED,
                  DELIVERY_DELETION_NOT_ALLOWED,
