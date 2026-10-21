@@ -27,8 +27,8 @@ public class ClientService {
 
     //유저 조회 / 요청한 유저가 없으면 요청업체 소속을 확인할 수 없어 권한 없음
     //유저 서비스는 응답을 data로 감싸서 반환, data가 없으면 유저 정보를 확인할 수 없어 서버 오류
-    public FetchUserByIdResponse fetchUserById(UUID userId) {
-        UserApiResponse<FetchUserByIdResponse> response;
+    public FetchUserByIdResponse.UserData fetchUserById(UUID userId) {
+        FetchUserByIdResponse response;
         try {
             response = userServiceClient.fetchUserById(userId);
         } catch (FeignException.NotFound e) {

@@ -30,7 +30,7 @@ public class OrderService {
     //주문생성
     public CreateOrderResponse create(CreateOrderRequest request) {
 
-        FetchUserByIdResponse user = clientService.fetchUserById(AuthContext.getUserId());
+        FetchUserByIdResponse.UserData user = clientService.fetchUserById(AuthContext.getUserId());
         OrderItem orderItem = prepareCreateOrder(request, user);
         Order order = orderItem.getOrder();
         CreateOrderProgress progress = CreateOrderProgress.start(orderItem);
@@ -51,12 +51,12 @@ public class OrderService {
             orderTransactionService.save(order, orderItem);
         } catch (RuntimeException e) {
             orderCompensator.compensateCreate(progress);
-            clientService.sendSlackDm("U0CA7AA95M5", "주문실패");
+            clientService.sendSlackDm(user.getSlackId(), "주문실패");
             throw e;
         }
 
         //Slack알림
-        clientService.sendSlackDm("U0CA7AA95M5", "주문성공");
+        clientService.sendSlackDm(user.getSlackId(), "주문성공");
 
         return CreateOrderResponse.from(orderItem);
     }
@@ -108,7 +108,7 @@ public class OrderService {
         }
     }
 
-    private OrderItem prepareCreateOrder(CreateOrderRequest request, FetchUserByIdResponse user) {
+    private OrderItem prepareCreateOrder(CreateOrderRequest request, FetchUserByIdResponse.UserData user) {
         orderValidator.validateNotSameCompany(request.getRequesterId(), request.getSupplierId());
         orderValidator.validateUserBelongsToRequester(user.getCompanyId(), request.getRequesterId());
         FetchItemByIdResponse item = clientService.fetchItemById(request.getItemId());

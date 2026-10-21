@@ -20,7 +20,6 @@ import logistics.order.infrastructure.client.dto.CreateDeliveryResponse;
 import logistics.order.infrastructure.client.dto.FetchCompanyByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchItemByIdResponse;
 import logistics.order.infrastructure.client.dto.FetchUserByIdResponse;
-import logistics.order.infrastructure.client.dto.UserApiResponse;
 import logistics.order.presentation.dto.request.CreateOrderRequest;
 import logistics.order.presentation.dto.response.CancelOrderResponse;
 import logistics.order.presentation.dto.response.CreateOrderResponse;
@@ -127,7 +126,6 @@ class OrderServiceTest {
         item.setCompanyName("공급업체");
         item.setName("생수 2L");
         item.setPrice(price);
-        item.setTotalQuantity(1_000L);
         return item;
     }
 
@@ -137,8 +135,10 @@ class OrderServiceTest {
     }
 
     //유저 서비스는 응답을 data로 감싸서 반환
-    private UserApiResponse<FetchUserByIdResponse> userResponse(UUID companyId) {
-        return new UserApiResponse<>(true, null, new FetchUserByIdResponse(companyId));
+    private FetchUserByIdResponse userResponse(UUID companyId) {
+        FetchUserByIdResponse.UserData data = new FetchUserByIdResponse.UserData();
+        data.setCompanyId(companyId);
+        return new FetchUserByIdResponse(true, null, data);
     }
 
     //외부 API가 모두 정상 응답하는 상황
@@ -398,7 +398,7 @@ class OrderServiceTest {
         public void 유저조회_응답에_data가_없으면_C500_예외가_발생하고_상품조회_전에_실패한다() {
             //given
             loginAs("COMPANY_MANAGER");
-            given(userServiceClient.fetchUserById(userId)).willReturn(new UserApiResponse<>(true, null, null));
+            given(userServiceClient.fetchUserById(userId)).willReturn(new FetchUserByIdResponse(true, null, null));
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest()))
