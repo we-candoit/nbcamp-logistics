@@ -111,6 +111,14 @@ public class UserService {
         user.softDelete(requesterId.toString());
     }
 
+    @Transactional
+    public void releaseCompany(UUID userId, UUID companyId) {
+        User user = userRepository.findById(userId).orElseThrow(
+                () -> new CustomException(ErrorCode.USER_NOT_FOUND)
+        );
+        user.releaseCompany(companyId);
+    }
+
     private CompanyResponse findCompany(UUID requesterId, UserRole requesterRole, String companyName) {
         List<CompanyResponse> companies;
         try {

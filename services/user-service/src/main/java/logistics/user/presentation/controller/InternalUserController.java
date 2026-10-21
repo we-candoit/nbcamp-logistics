@@ -3,6 +3,7 @@ package logistics.user.presentation.controller;
 import jakarta.validation.Valid;
 import logistics.user.application.service.UserService;
 import logistics.user.presentation.dto.request.CompanyConfirmRequest;
+import logistics.user.presentation.dto.request.CompanyReleaseRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +23,16 @@ public class InternalUserController {
             @PathVariable("id") UUID id,
             @Valid @RequestBody CompanyConfirmRequest request) {
         userService.confirmCompany(id, request.getCompanyId(), request.getCompanyName());
+        return ResponseEntity.ok().build();
+    }
+
+    // 업체 삭제 후 유저의 소속 해제
+    @PatchMapping("/{id}/affiliation/release")
+    public ResponseEntity<Void> releaseCompany(
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody CompanyReleaseRequest request
+    ) {
+        userService.releaseCompany(id, request.getCompanyId());
         return ResponseEntity.ok().build();
     }
 }

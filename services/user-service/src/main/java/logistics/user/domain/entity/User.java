@@ -107,6 +107,16 @@ public class User extends BaseEntity {
                 UserRole.MASTER, AffiliationType.COMPANY, "MASTER", AffiliationStatus.CONFIRMED);
     }
 
+    // 업체 삭제 시 소속 해제(다시 신청 가능한 상태로 변경)
+    public void releaseCompany(UUID companyId) {
+        // 해당 업체 소속이면서 CONFIRMED 상태여야만 해제 가능
+        if (affiliationStatus != AffiliationStatus.CONFIRMED || !companyId.equals(this.companyId)) {
+            throw new CustomException(ErrorCode.INVALID_AFFILIATION_RELEASE);
+        }
+        this.companyId = null;
+        this.affiliationStatus = AffiliationStatus.PENDING;
+    }
+
     // 배송담당자 권한 부여
     public void grantDeliveryManager() {
         this.isDeliveryManager = true;
