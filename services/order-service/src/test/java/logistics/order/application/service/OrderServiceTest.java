@@ -953,7 +953,7 @@ class OrderServiceTest {
             }
 
             @Test
-            public void 주문복구가_실패해도_1회_재시도하고_원래_예외를_그대로_전달한다() {
+            public void 주문복구가_실패해도_재시도하지_않고_원래_예외를_그대로_전달한다() {
                 //given
                 loginAs("MASTER");
                 Order order = givenCancelableOrder();
@@ -963,7 +963,7 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.cancelOrderById(order.getId()))
                         .isInstanceOf(FeignException.InternalServerError.class);
-                verify(orderTransactionService, times(2)).revertCancel(order.getId());
+                verify(orderTransactionService).revertCancel(order.getId());
             }
         }
     }
@@ -1161,7 +1161,7 @@ class OrderServiceTest {
             }
 
             @Test
-            public void 주문복구가_실패해도_1회_재시도하고_원래_예외를_그대로_전달한다() {
+            public void 주문복구가_실패해도_재시도하지_않고_원래_예외를_그대로_전달한다() {
                 //given
                 loginAs("MASTER");
                 Order order = givenDeletableOrder();
@@ -1171,7 +1171,7 @@ class OrderServiceTest {
                 //when, then
                 assertThatThrownBy(() -> orderService.deleteOrderById(order.getId()))
                         .isInstanceOf(FeignException.InternalServerError.class);
-                verify(orderTransactionService, times(2)).revertDelete(order.getId());
+                verify(orderTransactionService).revertDelete(order.getId());
             }
         }
     }
