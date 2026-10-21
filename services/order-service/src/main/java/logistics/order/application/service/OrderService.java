@@ -41,10 +41,10 @@ public class OrderService {
             progress.markStockDecreased();
 
             //배송생성
+            progress.markDeliveryRequested();
             CreateDeliveryResponse delivery = clientService.createDelivery(
                     CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
             );
-            progress.markDeliveryCreated(delivery.getDeliveryId());
 
             //주문확정 / CONFIRMED 상태
             order.confirm(delivery.getDeliveryId());

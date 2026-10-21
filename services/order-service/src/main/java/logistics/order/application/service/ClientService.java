@@ -121,6 +121,16 @@ public class ClientService {
         }
     }
 
+    //주문ID로 배송취소 (보상처리용) / 실패 처리는 보상 로직에서 담당
+    public void cancelDeliveryByOrderId(UUID orderId) {
+        deliveryServiceClient.cancelDeliveryByOrderId(orderId);
+    }
+
+    //주문ID로 배송삭제 (보상처리용) / 실패 처리는 보상 로직에서 담당
+    public void deleteDeliveryByOrderId(UUID orderId) {
+        deliveryServiceClient.deleteDeliveryByOrderId(orderId);
+    }
+
     //슬랙 DM 전송 / 알림 실패가 주문 처리 결과에 영향을 주지 않도록 예외는 로그만 남김
     public void sendSlackDm(String slackUserId, String message) {
         try {

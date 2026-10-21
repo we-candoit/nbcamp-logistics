@@ -536,8 +536,6 @@ class OrderServiceTest {
             loginAs("MASTER");
             givenExternalApisSucceed();
             given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity)).willReturn("OK");
-            given(deliveryServiceClient.cancelDelivery(deliveryId))
-                    .willReturn(new CancelDeliveryResponse(deliveryId, "CANCELLED"));
         }
 
         //WAITING 저장 시점에 생성된 주문ID
@@ -574,22 +572,25 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 배송생성에_실패하면_재고를_복구하고_FAILED로_변경한다() {
+        public void 배송생성에_실패하면_주문ID로_배송취소_삭제_후_재고를_복구하고_FAILED로_변경한다() {
             //given
             FeignException deliveryError = feignException();
             given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
+            //타임아웃 등으로 실제 생성됐을 수 있으므로 생성 실패여도 주문ID로 취소/삭제
+            UUID orderId = savedOrderId();
+            verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
+            verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
             verify(deliveryServiceClient, never()).cancelDelivery(any());
             verify(deliveryServiceClient, never()).deleteDelivery(any());
-            UUID orderId = savedOrderId();
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
             verify(orderTransactionService).failCreate(orderId, true);
         }
 
         @Test
-        public void 배송생성_응답에_배송ID가_없으면_C500_예외가_발생하고_재고만_복구한다() {
+        public void 배송생성_응답에_배송ID가_없으면_C500_예외가_발생하고_주문ID로_배송취소_삭제와_재고복구를_한다() {
             //given
             given(deliveryServiceClient.createDelivery(any()))
                     .willReturn(new CreateDeliveryResponse(null, null, "WAITING"));
@@ -597,9 +598,10 @@ class OrderServiceTest {
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest()))
                     .satisfies(e -> assertErrorCode(e, ErrorCode.C500_INTERNAL_SERVER_ERROR));
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
-            verify(deliveryServiceClient, never()).cancelDelivery(any());
             UUID orderId = savedOrderId();
+            verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
+            verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
             verify(orderTransactionService).failCreate(orderId, true);
         }
 
@@ -612,10 +614,10 @@ class OrderServiceTest {
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(dbError);
-            inOrder.verify(deliveryServiceClient).cancelDelivery(deliveryId);
-            inOrder.verify(deliveryServiceClient).deleteDelivery(deliveryId);
-            inOrder.verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
             UUID orderId = savedOrderId();
+            inOrder.verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
+            inOrder.verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            inOrder.verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
             inOrder.verify(orderTransactionService).failCreate(orderId, true);
         }
 
@@ -641,15 +643,15 @@ class OrderServiceTest {
             //given
             willDoNothing().willThrow(new RuntimeException("DB 오류"))
                     .given(orderTransactionService).save(any(), any());
-            given(deliveryServiceClient.cancelDelivery(deliveryId)).willThrow(feignException());
+            willThrow(feignException()).given(deliveryServiceClient).cancelDeliveryByOrderId(any());
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isInstanceOf(RuntimeException.class);
-            verify(deliveryServiceClient).cancelDelivery(deliveryId);
-            //취소되지 않은 배송은 삭제할 수 없으므로 삭제는 시도하지 않음
-            verify(deliveryServiceClient, never()).deleteDelivery(any());
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
             UUID orderId = savedOrderId();
+            verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
+            //취소되지 않은 배송은 삭제할 수 없으므로 삭제는 시도하지 않음
+            verify(deliveryServiceClient, never()).deleteDeliveryByOrderId(any());
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity);
             verify(orderTransactionService).failCreate(orderId, false);
         }
 

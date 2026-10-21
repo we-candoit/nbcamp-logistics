@@ -23,4 +23,12 @@ public interface DeliveryServiceClient {
     @DeleteMapping("/internal/deliveries/{id}")
     void deleteDelivery(@PathVariable("id") UUID deliveryId);
 
+    //주문ID로 배송취소 / 배송이 없으면 이후 배송생성을 차단 (보상처리에서 사용)
+    @PostMapping("/internal/deliveries/orders/{orderId}/cancel")
+    void cancelDeliveryByOrderId(@PathVariable("orderId") UUID orderId);
+
+    //주문ID로 배송삭제 / 취소된 배송 또는 생성 차단된 주문만 가능 (보상처리에서 사용)
+    @DeleteMapping("/internal/deliveries/orders/{orderId}")
+    void deleteDeliveryByOrderId(@PathVariable("orderId") UUID orderId);
+
 }
