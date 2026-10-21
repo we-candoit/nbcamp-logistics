@@ -1,7 +1,9 @@
 package logistics.company;
 
+import feign.FeignException;
 import logistics.company.application.service.CompanyService;
 import logistics.company.domain.entity.Company;
+import logistics.company.infrastructure.client.UserClient;
 import logistics.company.infrastructure.repository.CompanyItemRepository;
 import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.presentation.exception.BusinessException;
@@ -18,11 +20,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.BDDMockito.*;
 import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +33,8 @@ class CompanyDeleteTest {
 
     @Mock private CompanyRepository companyRepository;
     @Mock private CompanyItemRepository companyItemRepository;
+
+    @Mock private UserClient userClient;
 
     private static final UUID MANAGER_ID = UUID.randomUUID();
     private static final UUID OTHER_USER_ID = UUID.randomUUID();
@@ -62,6 +64,9 @@ class CompanyDeleteTest {
         assertThat(company.getDeletedBy()).isEqualTo(MANAGER_ID);
         then(companyItemRepository).should()
                 .softDeleteAllByCompanyId(company.getId(), MANAGER_ID, company.getDeletedAt());
+
+        then(userClient).should()
+                .releaseAffiliation(eq(MANAGER_ID), argThat(req -> req.getCompanyId().equals(company.getId())));
     }
 
     @Test
@@ -74,6 +79,9 @@ class CompanyDeleteTest {
         assertThat(company.getDeletedBy()).isEqualTo(MASTER_ID);
         then(companyItemRepository).should()
                 .softDeleteAllByCompanyId(company.getId(), MASTER_ID, company.getDeletedAt());
+
+        then(userClient).should()
+                .releaseAffiliation(eq(MANAGER_ID), argThat(req -> req.getCompanyId().equals(company.getId())));
     }
 
     @Test
@@ -85,6 +93,7 @@ class CompanyDeleteTest {
 
         assertErrorCode(thrown, ErrorCode.COMPANY_NOT_FOUND);
         then(companyItemRepository).should(never()).softDeleteAllByCompanyId(any(), any(), any());
+        then(userClient).should(never()).releaseAffiliation(any(), any());
     }
 
     @Test
@@ -97,5 +106,17 @@ class CompanyDeleteTest {
         assertErrorCode(thrown, ErrorCode.COMPANY_FORBIDDEN);
         assertThat(company.getDeletedAt()).isNull();
         then(companyItemRepository).should(never()).softDeleteAllByCompanyId(any(), any(), any());
+        then(userClient).should(never()).releaseAffiliation(any(), any());
+    }
+
+    @Test
+    @DisplayName("소속 해제 호출이 실패하면 예외가 전파된다 (트랜잭션 롤백 대상)")
+    void deleteCompany_releaseFail() {
+        given(companyRepository.findById(company.getId())).willReturn(Optional.of(company));
+        willThrow(FeignException.ServiceUnavailable.class)
+                .given(userClient).releaseAffiliation(eq(MANAGER_ID), any());
+
+        assertThatThrownBy(() -> companyService.deleteCompany(company.getId(), MANAGER_ID, "USER"))
+                .isInstanceOf(FeignException.class);
     }
 }

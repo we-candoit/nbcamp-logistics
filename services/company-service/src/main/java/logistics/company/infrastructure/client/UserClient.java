@@ -1,5 +1,6 @@
 package logistics.company.infrastructure.client;
 
+import logistics.company.infrastructure.client.dto.UserAffiliationReleaseRequest;
 import logistics.company.infrastructure.client.dto.UserAffiliationUpdateRequest;
 import logistics.company.infrastructure.client.dto.UserApiResponse;
 import logistics.company.infrastructure.client.dto.UserResponse;
@@ -19,4 +20,8 @@ public interface UserClient {
     @PatchMapping("/internal/users/{userId}/affiliation")
     void updateAffiliation(@PathVariable("userId") UUID userId,
                            @RequestBody UserAffiliationUpdateRequest request);
+
+    @PatchMapping("/internal/users/{userId}/affiliation/release")
+    void releaseAffiliation(@PathVariable("userId") UUID userId,
+                           @RequestBody UserAffiliationReleaseRequest request);
 }

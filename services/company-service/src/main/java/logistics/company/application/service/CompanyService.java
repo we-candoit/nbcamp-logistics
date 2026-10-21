@@ -3,6 +3,7 @@ package logistics.company.application.service;
 import logistics.company.domain.entity.Company;
 import logistics.company.infrastructure.client.HubClient;
 import logistics.company.infrastructure.client.UserClient;
+import logistics.company.infrastructure.client.dto.UserAffiliationReleaseRequest;
 import logistics.company.infrastructure.client.dto.UserAffiliationUpdateRequest;
 import logistics.company.infrastructure.client.dto.UserResponse;
 import logistics.company.infrastructure.repository.CompanyItemRepository;
@@ -195,5 +196,8 @@ public class CompanyService {
 
         // 4. 업체 소속 상품 연쇄 논리 삭제 (쿼리 1번으로 수행, 업체와 같은 삭제 시각 기록, 같은 트랜잭션이라 실패 시 함께 롤백)
         companyItemRepository.softDeleteAllByCompanyId(companyId, userId, company.getDeletedAt());
+
+        // 5. 담당자 소속 해제 CONFIRMED → PENDING, affiliationName은 유지 (DB 반영 성공 후 외부 호출, 실패 시 업체, 상품 삭제 전체 롤백)
+        userClient.releaseAffiliation(company.getManagerUserId(), UserAffiliationReleaseRequest.of(companyId));
     }
 }

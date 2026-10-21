@@ -1,9 +1,11 @@
 package logistics.company;
 
+import feign.FeignException;
 import logistics.company.application.service.CompanyItemService;
 import logistics.company.application.service.CompanyService;
 import logistics.company.domain.entity.Company;
 import logistics.company.domain.entity.CompanyItem;
+import logistics.company.infrastructure.client.UserClient;
 import logistics.company.infrastructure.repository.CompanyItemRepository;
 import logistics.company.infrastructure.repository.CompanyRepository;
 import logistics.company.presentation.exception.BusinessException;
@@ -25,7 +27,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 
 @ActiveProfiles("test")
 @SpringBootTest(
@@ -51,6 +55,8 @@ class CompanyDeleteIntegrationTest {
     @Autowired private JdbcTemplate jdbcTemplate;
 
     @MockitoBean private AuditorAware<UUID> auditorAware;
+
+    @MockitoBean private UserClient userClient;
 
     private static final UUID MANAGER_ID = UUID.randomUUID();
     private static final UUID OTHER_MANAGER_ID = UUID.randomUUID();
@@ -156,5 +162,19 @@ class CompanyDeleteIntegrationTest {
 
         assertThat(thrown).isInstanceOf(BusinessException.class);
         assertThat(((BusinessException) thrown).getErrorCode()).isEqualTo(ErrorCode.COMPANY_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("소속 해제가 실패하면 업체·상품 삭제가 모두 롤백된다")
+    void deleteCompany_releaseFail_rollback() {
+        willThrow(FeignException.ServiceUnavailable.class)
+                .given(userClient).releaseAffiliation(any(), any());
+
+        Throwable thrown = catchThrowable(() -> companyService.deleteCompany(companyId, MANAGER_ID, "USER"));
+
+        assertThat(thrown).isInstanceOf(FeignException.class);
+        assertThat(companyRow(companyId).get("deleted_at")).isNull();
+        assertThat(itemRow(squidId).get("deleted_at")).isNull();
+        assertThat(companyRepository.findById(companyId)).isPresent();
     }
 }
