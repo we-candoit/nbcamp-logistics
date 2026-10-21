@@ -28,4 +28,10 @@ public interface DeliveryRepository extends JpaRepository<Delivery, UUID>, JpaSp
         return findById(deliveryId)
                 .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
     }
+
+    // 삭제 여부랑 상관없이 주문ID로 배송 조회 -> 삭제된 배송 처리는 서비스에서 결정
+    default Delivery getByOrderIdIncludingDeleted(UUID orderId){
+        return findByOrderId(orderId)
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.DELIVERY_NOT_FOUND));
+    }
 }
