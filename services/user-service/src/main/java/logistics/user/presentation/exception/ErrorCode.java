@@ -25,6 +25,8 @@ public enum ErrorCode {
     COMPANY_NOT_FOUND(HttpStatus.BAD_REQUEST, "존재하지 않는 업체입니다."),
     // 업체 서버 꺼져있을 경우
     COMPANY_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "업체 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요."),
+    // 업체 삭제로 소속 해제 시, 해당 업체에 소속된 사용자가 아닐 때
+    INVALID_AFFILIATION_RELEASE(HttpStatus.CONFLICT, "해당 업체에 소속된 사용자만 소속을 해제할 수 있습니다."),
 
     // 허브명으로 검색 실패 시
     HUB_NOT_FOUND(HttpStatus.BAD_REQUEST, "존재하지 않는 허브입니다."),
