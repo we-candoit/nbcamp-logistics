@@ -586,7 +586,7 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 재고감소에_실패하면_원인과_관계없이_재고복원을_요청하고_원래_예외를_전달한다() {
+        public void 재고부족으로_재고감소가_거절되면_차감을_다시_확인하고_재고복원_없이_FAILED로_변경한다() {
             //given
             FeignException stockError = new FeignException.Conflict("재고가 부족합니다.", feignRequest(), null, null);
             willThrow(stockError).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
@@ -594,16 +594,34 @@ class OrderServiceTest {
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
             UUID orderId = savedOrderId();
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            //정방향 1회 + 보상 차감확인 1회
+            verify(hubServiceClient, times(2)).decreaseStock(supplierHubId, itemId, quantity, orderId);
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
             verifyNoInteractions(deliveryServiceClient);
+            verify(orderTransactionService).failCreate(orderId, true);
         }
 
         @Test
-        public void 재고감소가_타임아웃이어도_재고복원에_성공하면_FAILED로_변경한다() {
+        public void 재고가_없어_재고감소가_거절되면_재고복원_없이_FAILED로_변경한다() {
             //given
-            //실제로는 차감됐지만 응답을 받지 못한 경우 → 복원 성공
+            FeignException notFound = new FeignException.NotFound("최초 재고 등록이 필요합니다.", feignRequest(), null, null);
+            willThrow(notFound).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(notFound);
+            UUID orderId = savedOrderId();
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
+            verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 재고감소가_타임아웃이고_실제로_차감됐으면_차감확인_후_재고를_복원하고_FAILED로_변경한다() {
+            //given
+            //정방향은 응답을 받지 못했지만 실제로는 차감됨 → 차감확인 요청에 hub-service가 이전 결과 반환
             RetryableException timeout = new RetryableException(-1, "Read timed out", Request.HttpMethod.POST, (Long) null, feignRequest());
-            willThrow(timeout).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
+            given(hubServiceClient.decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
+                    .willThrow(timeout)
+                    .willReturn(new StockResponse());
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(timeout);
@@ -613,17 +631,49 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 차감되지_않아_재고복원이_거절되면_COMPENSATION_FAILED로_변경한다() {
+        public void 재고감소가_타임아웃이고_차감확인이_거절되면_재고복원_없이_FAILED로_변경한다() {
             //given
-            FeignException stockError = new FeignException.Conflict("재고가 부족합니다.", feignRequest(), null, null);
-            willThrow(stockError).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
-            //차감 기록이 없는 복원은 hub-service에서 409
-            given(hubServiceClient.restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
-                    .willThrow(new FeignException.Conflict("해당 주문에 대한 재고 차감 기록이 없습니다.", feignRequest(), null, null));
+            //정방향이 실제로 반영되지 않은 경우 → 차감확인에서 재고부족 409
+            RetryableException timeout = new RetryableException(-1, "Read timed out", Request.HttpMethod.POST, (Long) null, feignRequest());
+            given(hubServiceClient.decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
+                    .willThrow(timeout)
+                    .willThrow(new FeignException.Conflict("재고가 부족합니다.", feignRequest(), null, null));
 
             //when, then
-            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(timeout);
             UUID orderId = savedOrderId();
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
+            verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 차감확인도_타임아웃이면_재고복원_없이_COMPENSATION_FAILED로_변경한다() {
+            //given
+            //차감 여부를 확정할 수 없음 → 보상 실패
+            RetryableException timeout = new RetryableException(-1, "Read timed out", Request.HttpMethod.POST, (Long) null, feignRequest());
+            willThrow(timeout).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(timeout);
+            UUID orderId = savedOrderId();
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
+            verify(orderTransactionService).failCreate(orderId, false);
+        }
+
+        @Test
+        public void 차감확인이_404_409가_아닌_4xx로_거절되면_COMPENSATION_FAILED로_변경한다() {
+            //given
+            //요청 자체가 잘못된 경우(401 등)는 차감 여부를 확정할 수 없음
+            FeignException deliveryError = feignException();
+            given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
+            given(hubServiceClient.decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
+                    .willReturn(new StockResponse())
+                    .willThrow(new FeignException.Unauthorized("요청 사용자 정보를 확인할 수 없습니다.", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
+            UUID orderId = savedOrderId();
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
             verify(orderTransactionService).failCreate(orderId, false);
         }
 
@@ -694,6 +744,7 @@ class OrderServiceTest {
             UUID orderId = savedOrderId();
             inOrder.verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
             inOrder.verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            inOrder.verify(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity, orderId);
             inOrder.verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
             inOrder.verify(orderTransactionService).failCreate(orderId, true);
         }

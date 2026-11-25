@@ -47,10 +47,31 @@ public class OrderCompensator {
                     && compensate(orderId, "배송삭제", () -> clientService.deleteDeliveryByOrderId(orderId));
         }
         if (progress.isStockDecreaseRequested()) {
-            compensated &= compensate(orderId, "재고복구", () -> clientService.restoreStock(
-                    progress.getHubId(), progress.getItemId(), progress.getQuantity(), orderId));
+            compensated &= rollbackStock(progress);
         }
         return compensated;
+    }
+
+    //재고차감 응답(타임아웃 등)만으로는 차감 여부를 알 수 없어 같은 주문ID로 차감을 다시 요청해 확정
+    //차감된 경우에만 복구, 차감된 적 없으면 되돌릴 것이 없으므로 보상 성공
+    //재고복원의 409는 차감 기록 없음과 복구 불가를 구분할 수 없어 차감 확인으로 먼저 거름
+    private boolean rollbackStock(CreateOrderProgress progress) {
+        UUID orderId = progress.getOrderId();
+        boolean decreased;
+        try {
+            decreased = clientService.confirmStockDecreased(
+                    progress.getHubId(), progress.getItemId(), progress.getQuantity(), orderId);
+        } catch (RuntimeException e) {
+            log.error("주문 보상 최종 실패 orderId={} action={}", orderId, "재고차감확인", e);
+            return false;
+        }
+
+        if (!decreased) {
+            log.info("차감된 재고가 없어 재고복구 생략 orderId={}", orderId);
+            return true;
+        }
+        return compensate(orderId, "재고복구", () -> clientService.restoreStock(
+                progress.getHubId(), progress.getItemId(), progress.getQuantity(), orderId));
     }
 
     //보상 실행 / 외부 호출은 Feign Retryer에서 재시도가 끝난 상태, DB 복구는 재시도하지 않으므로 실패하면 최종 실패
