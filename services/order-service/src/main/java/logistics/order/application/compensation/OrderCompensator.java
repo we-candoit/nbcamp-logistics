@@ -42,14 +42,30 @@ public class OrderCompensator {
 
         //배송생성을 요청했다면 생성 여부와 관계없이 주문ID로 취소/삭제 (배송이 없으면 이후 생성을 차단)
         if (progress.isDeliveryCreateRequested()) {
-            //배송은 취소된 상태에서만 삭제 가능
-            compensated &= compensate(orderId, "배송취소", () -> clientService.cancelDeliveryByOrderId(orderId))
-                    && compensate(orderId, "배송삭제", () -> clientService.deleteDeliveryByOrderId(orderId));
+            compensated &= rollbackDelivery(orderId);
         }
         if (progress.isStockDecreaseRequested()) {
             compensated &= rollbackStock(progress);
         }
         return compensated;
+    }
+
+    //배송취소 후 삭제 / 배송은 취소된 상태에서만 삭제 가능하므로 취소 실패시 삭제 생략
+    //이미 삭제된 배송(이전 보상에서 취소/삭제 완료)은 되돌릴 것이 없으므로 보상 성공
+    private boolean rollbackDelivery(UUID orderId) {
+        boolean notDeleted;
+        try {
+            notDeleted = clientService.cancelDeliveryIfNotDeleted(orderId);
+        } catch (RuntimeException e) {
+            log.error("주문 보상 최종 실패 orderId={} action={}", orderId, "배송취소", e);
+            return false;
+        }
+
+        if (!notDeleted) {
+            log.info("이미 삭제된 배송이라 배송취소/삭제 생략 orderId={}", orderId);
+            return true;
+        }
+        return compensate(orderId, "배송삭제", () -> clientService.deleteDeliveryByOrderId(orderId));
     }
 
     //재고차감 응답(타임아웃 등)만으로는 차감 여부를 알 수 없어 같은 주문ID로 차감을 다시 요청해 확정

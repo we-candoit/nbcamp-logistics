@@ -784,6 +784,40 @@ class OrderServiceTest {
         }
 
         @Test
+        public void 이미_삭제된_배송이면_배송삭제_없이_재고를_복구하고_FAILED로_변경한다() {
+            //given
+            //이전 보상에서 배송취소/삭제까지 끝난 경우 → 삭제된 배송의 취소는 배송 서비스에서 404
+            FeignException deliveryError = feignException();
+            given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
+            given(deliveryServiceClient.cancelDeliveryByOrderId(any()))
+                    .willThrow(new FeignException.NotFound("배송을 찾을 수 없습니다.", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
+            UUID orderId = savedOrderId();
+            verify(deliveryServiceClient, never()).deleteDeliveryByOrderId(any());
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 배송취소가_404가_아닌_4xx로_거절되면_배송삭제_없이_COMPENSATION_FAILED로_변경한다() {
+            //given
+            //이미 출발한 배송 등 취소할 수 없는 경우 → 되돌릴 수 없음
+            FeignException deliveryError = feignException();
+            given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
+            given(deliveryServiceClient.cancelDeliveryByOrderId(any()))
+                    .willThrow(new FeignException.Conflict("배송을 취소할 수 없습니다.", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
+            UUID orderId = savedOrderId();
+            verify(deliveryServiceClient, never()).deleteDeliveryByOrderId(any());
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            verify(orderTransactionService).failCreate(orderId, false);
+        }
+
+        @Test
         public void 주문상태_변경에_실패해도_원래_예외를_전달한다() {
             //given
             FeignException deliveryError = feignException();

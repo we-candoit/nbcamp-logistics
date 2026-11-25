@@ -105,6 +105,21 @@ public class ClientService {
         }
     }
 
+    //보상용 배송취소 / 배송이 취소되거나 생성이 차단되면 true
+    //이미 삭제된 배송은 배송 서비스가 404로 응답 → 되돌릴 것이 없으므로 false
+    //그 외 실패(409 취소 불가, 5xx, 타임아웃)는 예외 전달
+    public boolean cancelDeliveryIfNotDeleted(UUID orderId) {
+        try {
+            cancelDeliveryByOrderId(orderId);
+            return true;
+        } catch (CustomException e) {
+            if (e.getErrorCode() == ErrorCode.C404_DELIVERY_NOT_FOUND) {
+                return false;
+            }
+            throw e;
+        }
+    }
+
     //주문ID로 배송삭제 요청 / 배송이 삭제되지 않으면 주문도 삭제 불가
     public void deleteDeliveryByOrderId(UUID orderId) {
         try {
