@@ -2,6 +2,7 @@ package logistics.order.infrastructure.repository;
 
 import logistics.order.domain.entity.OrderItem;
 import logistics.order.domain.enums.OrderStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,6 +21,14 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
     //주문 ID로 주문상품 조회 / 삭제 여부와 관계없이 조회 (주문삭제 보상처리용)
     @Query("select oi from OrderItem oi join fetch oi.order o where o.id = :orderId")
     Optional<OrderItem> findWithOrderIncludingDeleted(@Param("orderId") UUID orderId);
+
+    //재보상 대상 조회 / 재보상 실패 횟수가 상한 미만인 주문을 오래된 순으로, 건수는 pageable로 제한
+    @Query("select oi from OrderItem oi join fetch oi.order o " +
+            "where o.status = :status and o.compensationRetryCount < :maxRetryCount and o.deletedAt is null " +
+            "order by o.createdAt asc")
+    List<OrderItem> findRecompensationTargets(@Param("status") OrderStatus status,
+                                              @Param("maxRetryCount") int maxRetryCount,
+                                              Pageable pageable);
 
     //===== 주문 목록 조회 / 삭제되지 않은 주문만, 최신순 =====
     //null 파라미터 비교(:status is null)는 PostgreSQL에서 타입 추론 오류가 날 수 있어 조건별로 분리

@@ -9,6 +9,7 @@ import logistics.order.infrastructure.repository.OrderRepository;
 import logistics.order.common.exception.CustomException;
 import logistics.order.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -89,6 +90,12 @@ public class OrderTransactionService {
         } else {
             order.compensationFailed();
         }
+    }
+
+    //재보상 대상 조회 / COMPENSATION_FAILED이고 재보상 실패 횟수가 상한 미만인 주문을 오래된 순으로 최대 limit건
+    public List<OrderItem> findRecompensationTargets(int maxRetryCount, int limit) {
+        return orderItemRepository.findRecompensationTargets(
+                OrderStatus.COMPENSATION_FAILED, maxRetryCount, PageRequest.of(0, limit));
     }
 
     //재보상 결과에 따라 주문상태 변경, 재보상 성공 FAILED, 재보상 실패 횟수 증가

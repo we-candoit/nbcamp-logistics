@@ -450,6 +450,86 @@ class OrderTransactionServiceTest {
     }
 
     @Nested
+    @DisplayName("findRecompensationTargets()")
+    class FindRecompensationTargets {
+
+        private static final int MAX_RETRY_COUNT = 5;
+
+        //COMPENSATION_FAILED 주문을 재보상 실패 횟수와 생성시각을 지정해 저장
+        private Order savedCompensationFailedOrder(int retryCount, LocalDateTime createdAt) {
+            Order order = new Order(userId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", "문 앞에 놓아주세요");
+            order.compensationFailed();
+            ReflectionTestUtils.setField(order, "compensationRetryCount", retryCount);
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            setCreatedAt(order, createdAt);
+            return order;
+        }
+
+        //createdAt은 updatable = false라 엔티티로는 변경 불가 → native query로 변경
+        private void setCreatedAt(Order order, LocalDateTime createdAt) {
+            em.createNativeQuery("update p_orders set created_at = :createdAt where id = :id")
+                    .setParameter("createdAt", createdAt)
+                    .setParameter("id", order.getId())
+                    .executeUpdate();
+        }
+
+        private List<UUID> orderIds(List<OrderItem> orderItems) {
+            return orderItems.stream().map(oi -> oi.getOrder().getId()).toList();
+        }
+
+        @Test
+        public void COMPENSATION_FAILED이고_재보상_실패_횟수가_상한_미만인_주문만_오래된_순으로_조회한다() {
+            //given
+            Order latest = savedCompensationFailedOrder(MAX_RETRY_COUNT - 1, LocalDateTime.of(2026, 10, 3, 12, 0));
+            Order oldest = savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 1, 12, 0));
+            savedCompensationFailedOrder(MAX_RETRY_COUNT, LocalDateTime.of(2026, 10, 2, 12, 0));
+            //다른 상태의 주문은 제외
+            Order confirmed = confirmedOrder();
+            orderTransactionService.save(confirmed, orderItem(confirmed));
+            em.flush();
+            em.clear();
+
+            //when
+            List<OrderItem> result = orderTransactionService.findRecompensationTargets(MAX_RETRY_COUNT, 50);
+
+            //then
+            assertThat(orderIds(result)).containsExactly(oldest.getId(), latest.getId());
+            //재보상에 필요한 주문 정보를 함께 조회
+            assertThat(Hibernate.isInitialized(result.get(0).getOrder())).isTrue();
+        }
+
+        @Test
+        public void 삭제된_주문은_조회하지_않는다() {
+            //given
+            Order order = savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 1, 12, 0));
+            em.createNativeQuery("update p_orders set deleted_at = :deletedAt where id = :id")
+                    .setParameter("deletedAt", LocalDateTime.of(2026, 10, 2, 12, 0))
+                    .setParameter("id", order.getId())
+                    .executeUpdate();
+            em.clear();
+
+            //when, then
+            assertThat(orderTransactionService.findRecompensationTargets(MAX_RETRY_COUNT, 50)).isEmpty();
+        }
+
+        @Test
+        public void 최대_limit건까지_오래된_순으로_조회한다() {
+            //given
+            Order first = savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 1, 12, 0));
+            Order second = savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 2, 12, 0));
+            savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 3, 12, 0));
+            em.clear();
+
+            //when
+            List<OrderItem> result = orderTransactionService.findRecompensationTargets(MAX_RETRY_COUNT, 2);
+
+            //then
+            assertThat(orderIds(result)).containsExactly(first.getId(), second.getId());
+        }
+    }
+
+    @Nested
     @DisplayName("failRecompensation()")
     class FailRecompensation {
 
