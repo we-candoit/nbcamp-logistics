@@ -2,6 +2,7 @@ package logistics.order.application.service;
 
 import jakarta.persistence.EntityManager;
 import logistics.order.application.validator.OrderValidator;
+import logistics.order.common.AuthContext;
 import logistics.order.common.AuthHeaders;
 import logistics.order.config.AuditingConfig;
 import logistics.order.domain.entity.Order;
@@ -446,6 +447,95 @@ class OrderTransactionServiceTest {
                     .isInstanceOf(CustomException.class)
                     .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
                             .isEqualTo(ErrorCode.C409_INVALID_ORDER_STATUS));
+        }
+    }
+
+    @Nested
+    @DisplayName("markStaleWaitingAsCompensationFailed()")
+    class MarkStaleWaitingAsCompensationFailed {
+
+        private final LocalDateTime threshold = LocalDateTime.of(2026, 10, 1, 12, 0);
+
+        //지정한 상태와 생성시각으로 저장
+        private Order savedOrder(OrderStatus status, LocalDateTime createdAt) {
+            Order order = new Order(userId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", "문 앞에 놓아주세요");
+            ReflectionTestUtils.setField(order, "status", status);
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            //createdAt은 updatable = false라 엔티티로는 변경 불가 → native query로 변경
+            em.createNativeQuery("update p_orders set created_at = :createdAt where id = :id")
+                    .setParameter("createdAt", createdAt)
+                    .setParameter("id", order.getId())
+                    .executeUpdate();
+            em.clear();
+            return order;
+        }
+
+        private Order findOrder(UUID orderId) {
+            return orderRepository.findById(orderId).orElseThrow();
+        }
+
+        @Test
+        public void 기준시각_이전에_생성된_WAITING_주문만_COMPENSATION_FAILED로_전환하고_주문ID를_반환한다() {
+            //given
+            Order stale = savedOrder(OrderStatus.WAITING, threshold.minusMinutes(1));
+            Order recent = savedOrder(OrderStatus.WAITING, threshold.plusMinutes(1));
+            Order confirmed = savedOrder(OrderStatus.CONFIRMED, threshold.minusMinutes(1));
+
+            //when
+            List<UUID> result = orderTransactionService.markStaleWaitingAsCompensationFailed(threshold);
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(result).containsExactly(stale.getId());
+            assertThat(findOrder(stale.getId()).getStatus()).isEqualTo(OrderStatus.COMPENSATION_FAILED);
+            assertThat(findOrder(recent.getId()).getStatus()).isEqualTo(OrderStatus.WAITING);
+            assertThat(findOrder(confirmed.getId()).getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @Test
+        public void 전환한_주문의_수정자는_현재_사용자로_기록된다() {
+            //given
+            Order stale = savedOrder(OrderStatus.WAITING, threshold.minusMinutes(1));
+            UUID systemUserId = UUID.randomUUID();
+
+            //when
+            AuthContext.runAsSystem(systemUserId, "MASTER",
+                    () -> orderTransactionService.markStaleWaitingAsCompensationFailed(threshold));
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(findOrder(stale.getId()).getUpdatedBy()).isEqualTo(systemUserId);
+        }
+
+        @Test
+        public void 조회_후_상태가_바뀐_주문은_전환하지_않는다() {
+            //given
+            //조회 시점엔 WAITING이었지만 전환 전에 주문이 확정된 경우 → 조건부 UPDATE로 0건
+            Order stale = savedOrder(OrderStatus.WAITING, threshold.minusMinutes(1));
+            em.createNativeQuery("update p_orders set status = 'CONFIRMED' where id = :id")
+                    .setParameter("id", stale.getId())
+                    .executeUpdate();
+
+            //when
+            int updated = orderRepository.updateStatusIfCurrent(stale.getId(), OrderStatus.WAITING,
+                    OrderStatus.COMPENSATION_FAILED, LocalDateTime.now(), userId);
+            em.clear();
+
+            //then
+            assertThat(updated).isZero();
+            assertThat(findOrder(stale.getId()).getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @Test
+        public void 대상이_없으면_빈_목록을_반환한다() {
+            //given
+            savedOrder(OrderStatus.WAITING, threshold.plusMinutes(1));
+
+            //when, then
+            assertThat(orderTransactionService.markStaleWaitingAsCompensationFailed(threshold)).isEmpty();
         }
     }
 

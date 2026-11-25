@@ -1,6 +1,7 @@
 package logistics.order.application.service;
 
 import logistics.order.application.validator.OrderValidator;
+import logistics.order.common.AuthContext;
 import logistics.order.domain.entity.Order;
 import logistics.order.domain.entity.OrderItem;
 import logistics.order.domain.enums.OrderStatus;
@@ -13,6 +14,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -90,6 +93,25 @@ public class OrderTransactionService {
         } else {
             order.compensationFailed();
         }
+    }
+
+    //기준시각 이전에 생성되어 아직 WAITING인 주문을 COMPENSATION_FAILED로 전환해 재보상 대상에 포함 / 전환된 주문ID 반환
+    //주문생성 중 서버가 종료되면 보상이 실행되지 않아 WAITING으로 남음 → 재보상으로 처리
+    //조회 후 주문이 확정되는 등 상태가 바뀌었으면 전환하지 않음 (조건부 UPDATE)
+    @Transactional
+    public List<UUID> markStaleWaitingAsCompensationFailed(LocalDateTime threshold) {
+        List<UUID> staleOrderIds = orderRepository.findIdsByStatusCreatedBefore(OrderStatus.WAITING, threshold);
+        UUID userId = AuthContext.getUserId();
+
+        List<UUID> markedOrderIds = new ArrayList<>();
+        for (UUID orderId : staleOrderIds) {
+            int updated = orderRepository.updateStatusIfCurrent(
+                    orderId, OrderStatus.WAITING, OrderStatus.COMPENSATION_FAILED, LocalDateTime.now(), userId);
+            if (updated == 1) {
+                markedOrderIds.add(orderId);
+            }
+        }
+        return markedOrderIds;
     }
 
     //재보상 대상 조회 / COMPENSATION_FAILED이고 재보상 실패 횟수가 상한 미만인 주문을 오래된 순으로 최대 limit건
