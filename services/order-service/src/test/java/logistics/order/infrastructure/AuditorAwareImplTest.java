@@ -1,5 +1,6 @@
 package logistics.order.infrastructure;
 
+import logistics.order.common.AuthContext;
 import logistics.order.common.AuthHeaders;
 import logistics.order.presentation.AuthInterceptor;
 import org.junit.jupiter.api.AfterEach;
@@ -29,6 +30,21 @@ class AuditorAwareImplTest {
     void afterEach() {
         // ThreadLocal이라 비우지 않으면 다음 테스트에 남음
         RequestContextHolder.resetRequestAttributes();
+    }
+
+    //요청 없이 시스템 사용자로 실행 중인 경우 (스케줄러 등)
+    @Test
+    public void 시스템_사용자로_실행_중이면_시스템_사용자가_감사_정보가_된다() {
+        //given
+        RequestContextHolder.resetRequestAttributes();
+        UUID systemUserId = UUID.randomUUID();
+        Object[] auditor = new Object[1];
+
+        //when
+        AuthContext.runAsSystem(systemUserId, "MASTER", () -> auditor[0] = auditorAwareImpl.getCurrentAuditor());
+
+        //then
+        assertThat(auditor[0]).isEqualTo(Optional.of(systemUserId));
     }
 
     //username이 있는 경우

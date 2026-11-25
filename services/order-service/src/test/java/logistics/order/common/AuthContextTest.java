@@ -39,6 +39,72 @@ class AuthContextTest {
     }
 
     @Nested
+    @DisplayName("runAsSystem()")
+    class RunAsSystem {
+
+        private final UUID systemUserId = UUID.randomUUID();
+
+        @Test
+        public void 요청_컨텍스트가_없어도_실행_중에는_시스템_사용자를_반환한다() {
+            //given
+            RequestContextHolder.resetRequestAttributes();
+            UUID[] userId = new UUID[1];
+            String[] role = new String[1];
+
+            //when
+            AuthContext.runAsSystem(systemUserId, "MASTER", () -> {
+                userId[0] = AuthContext.getUserId();
+                role[0] = AuthContext.getUserRole();
+            });
+
+            //then
+            assertThat(userId[0]).isEqualTo(systemUserId);
+            assertThat(role[0]).isEqualTo("MASTER");
+        }
+
+        @Test
+        public void 요청_정보가_있어도_실행_중에는_시스템_사용자가_우선한다() {
+            //given
+            request.setAttribute(AuthHeaders.USER_ID, UUID.randomUUID().toString());
+            request.setAttribute(AuthHeaders.ROLE, "COMPANY_MANAGER");
+            UUID[] userId = new UUID[1];
+
+            //when
+            AuthContext.runAsSystem(systemUserId, "MASTER", () -> userId[0] = AuthContext.getUserId());
+
+            //then
+            assertThat(userId[0]).isEqualTo(systemUserId);
+        }
+
+        @Test
+        public void 실행이_끝나면_시스템_사용자를_비운다() {
+            //given
+            RequestContextHolder.resetRequestAttributes();
+
+            //when
+            AuthContext.runAsSystem(systemUserId, "MASTER", () -> {
+            });
+
+            //then
+            assertThatThrownBy(AuthContext::findUserId).isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        public void 작업이_예외로_끝나도_시스템_사용자를_비운다() {
+            //given
+            RequestContextHolder.resetRequestAttributes();
+
+            //when
+            assertThatThrownBy(() -> AuthContext.runAsSystem(systemUserId, "MASTER", () -> {
+                throw new RuntimeException("작업 실패");
+            })).hasMessage("작업 실패");
+
+            //then
+            assertThatThrownBy(AuthContext::findUserId).isInstanceOf(IllegalStateException.class);
+        }
+    }
+
+    @Nested
     @DisplayName("findUserId()")
     class FindUserId {
 
