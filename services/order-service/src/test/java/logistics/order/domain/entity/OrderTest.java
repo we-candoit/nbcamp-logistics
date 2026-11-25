@@ -280,6 +280,70 @@ class OrderTest {
     }
 
     @Nested
+    @DisplayName("failed()")
+    class Failed {
+
+        @ParameterizedTest
+        @EnumSource(value = OrderStatus.class, names = {"WAITING", "COMPENSATION_FAILED"})
+        public void 대기_또는_보상실패_주문은_FAILED로_변경된다(OrderStatus status) {
+            //given
+            Order order = createOrder();
+            ReflectionTestUtils.setField(order, "status", status);
+
+            //when
+            order.failed();
+
+            //then
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.FAILED);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = OrderStatus.class, names = {"WAITING", "COMPENSATION_FAILED"}, mode = EnumSource.Mode.EXCLUDE)
+        public void 그_외_상태의_주문은_예외_없이_상태가_그대로다(OrderStatus status) {
+            //given
+            Order order = createOrder();
+            ReflectionTestUtils.setField(order, "status", status);
+
+            //when
+            order.failed();
+
+            //then
+            assertThat(order.getStatus()).isEqualTo(status);
+        }
+    }
+
+    @Nested
+    @DisplayName("compensationFailed()")
+    class CompensationFailed {
+
+        @Test
+        public void 대기_주문은_COMPENSATION_FAILED로_변경된다() {
+            //given
+            Order order = createOrder();
+
+            //when
+            order.compensationFailed();
+
+            //then
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.COMPENSATION_FAILED);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = OrderStatus.class, names = "WAITING", mode = EnumSource.Mode.EXCLUDE)
+        public void 대기가_아닌_주문은_예외_없이_상태가_그대로다(OrderStatus status) {
+            //given
+            Order order = createOrder();
+            ReflectionTestUtils.setField(order, "status", status);
+
+            //when
+            order.compensationFailed();
+
+            //then
+            assertThat(order.getStatus()).isEqualTo(status);
+        }
+    }
+
+    @Nested
     @DisplayName("isCancelable()")
     class IsCancelable {
 

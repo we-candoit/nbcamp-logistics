@@ -100,9 +100,10 @@ public class Order extends BaseEntity {
         }
     }
 
-    //주문생성 실패, 보상이 모두 성공한 경우 WAITING 상태만 FAILED로 변경
+    //주문생성 실패, 보상이 모두 성공한 경우 WAITING, COMPENSATION_FAILED 상태만 FAILED로 변경
+    //COMPENSATION_FAILED는 재보상에 성공한 경우
     public void failed() {
-        if (OrderStatus.WAITING == this.status) {
+        if (OrderStatus.WAITING == this.status || OrderStatus.COMPENSATION_FAILED == this.status) {
             this.status = OrderStatus.FAILED;
         }
     }
