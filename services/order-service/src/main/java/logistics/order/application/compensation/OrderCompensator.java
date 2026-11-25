@@ -2,6 +2,7 @@ package logistics.order.application.compensation;
 
 import logistics.order.application.service.ClientService;
 import logistics.order.application.service.OrderTransactionService;
+import logistics.order.domain.entity.OrderItem;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,33 @@ public class OrderCompensator {
     public void compensateCreate(CreateOrderProgress progress) {
         boolean compensated = rollbackCreate(progress);
         markCreateFailed(progress.getOrderId(), compensated);
+    }
+
+    //COMPENSATION_FAILED 주문 재보상 / 모든 단계를 다시 보상한 뒤 결과 반영
+    //재보상 성공 FAILED, 실패시 재보상 실패 횟수 증가 / 상한에 도달하면 수동 처리 대상
+    public void recompensateCreate(OrderItem orderItem, int maxRetryCount) {
+        CreateOrderProgress progress = CreateOrderProgress.forRecompensation(orderItem);
+        UUID orderId = progress.getOrderId();
+        boolean compensated = rollbackCreate(progress);
+
+        int retryCount;
+        try {
+            retryCount = orderTransactionService.failRecompensation(orderId, compensated);
+        } catch (RuntimeException e) {
+            //상태가 COMPENSATION_FAILED로 남아 다음 재보상 대상이 됨 (보상 API는 멱등)
+            log.error("주문 재보상 결과 반영 실패 orderId={} compensated={}", orderId, compensated, e);
+            return;
+        }
+
+        if (compensated) {
+            log.info("주문 재보상 성공 orderId={} retryCount={}", orderId, retryCount);
+        } else if (retryCount >= maxRetryCount) {
+            log.error("주문 보상 수동 처리 필요 orderId={} retryCount={}/{} hubId={} itemId={} quantity={}",
+                    orderId, retryCount, maxRetryCount,
+                    progress.getHubId(), progress.getItemId(), progress.getQuantity());
+        } else {
+            log.warn("주문 재보상 실패 orderId={} retryCount={}/{}", orderId, retryCount, maxRetryCount);
+        }
     }
 
     //배송취소 실패시 주문상태 CONFIRMED로 복구

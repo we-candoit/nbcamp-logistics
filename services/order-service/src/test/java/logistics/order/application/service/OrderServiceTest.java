@@ -831,6 +831,102 @@ class OrderServiceTest {
     }
 
     @Nested
+    @DisplayName("주문생성 재보상 - recompensateCreate()")
+    class RecompensateCreate {
+
+        private static final int MAX_RETRY_COUNT = 5;
+
+        private OrderItem orderItem;
+        private UUID orderId;
+
+        //보상에 실패해 COMPENSATION_FAILED로 저장된 주문
+        @BeforeEach
+        void setUp() {
+            Order order = new Order(userId, requesterId, requesterHubId, "서울시 강남구 테헤란로 1", "문 앞에 놓아주세요");
+            order.compensationFailed();
+            orderItem = new OrderItem(itemId, "생수 2L", price, quantity, supplierHubId, supplierId, order);
+            orderId = order.getId();
+
+            given(deliveryServiceClient.cancelDeliveryByOrderId(orderId))
+                    .willReturn(new CancelDeliveryResponse(orderId, deliveryId, "CANCELLED"));
+            given(hubServiceClient.decreaseStock(supplierHubId, itemId, quantity, orderId)).willReturn(new StockResponse());
+            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity, orderId)).willReturn(new StockResponse());
+        }
+
+        @Test
+        public void 어느_단계까지_진행됐는지_모르므로_모든_단계를_순서대로_보상하고_성공을_반영한다() {
+            //given
+            InOrder inOrder = inOrder(deliveryServiceClient, hubServiceClient, orderTransactionService);
+
+            //when
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+
+            //then
+            inOrder.verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
+            inOrder.verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            inOrder.verify(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity, orderId);
+            inOrder.verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            inOrder.verify(orderTransactionService).failRecompensation(orderId, true);
+        }
+
+        @Test
+        public void 배송이_생성되지_않은_주문은_생성차단_후_삭제하고_성공을_반영한다() {
+            //given
+            //재고감소 단계에서 실패해 배송을 요청하지 않았던 주문 → 배송 서비스는 생성차단으로 응답
+            given(deliveryServiceClient.cancelDeliveryByOrderId(orderId))
+                    .willReturn(new CancelDeliveryResponse(orderId, null, "CREATION_BLOCKED"));
+
+            //when
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+
+            //then
+            verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            verify(orderTransactionService).failRecompensation(orderId, true);
+        }
+
+        @Test
+        public void 보상_단계가_하나라도_실패하면_재보상_실패를_반영한다() {
+            //given
+            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity, orderId))
+                    .willThrow(feignException());
+            given(orderTransactionService.failRecompensation(orderId, false)).willReturn(1);
+
+            //when
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+
+            //then
+            verify(orderTransactionService).failRecompensation(orderId, false);
+        }
+
+        @Test
+        public void 재보상_실패_횟수가_상한에_도달해도_예외_없이_끝난다() {
+            //given
+            willThrow(feignException()).given(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            given(orderTransactionService.failRecompensation(orderId, false)).willReturn(MAX_RETRY_COUNT);
+
+            //when
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+
+            //then
+            //배송삭제가 실패해도 재고 보상은 계속 수행
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            verify(orderTransactionService).failRecompensation(orderId, false);
+        }
+
+        @Test
+        public void 재보상_결과_반영에_실패해도_예외를_던지지_않는다() {
+            //given
+            //상태가 COMPENSATION_FAILED로 남아 다음 재보상 대상이 됨
+            given(orderTransactionService.failRecompensation(orderId, true))
+                    .willThrow(new RuntimeException("DB 오류"));
+
+            //when, then
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+            verify(orderTransactionService).failRecompensation(orderId, true);
+        }
+    }
+
+    @Nested
     @DisplayName("getOrderById()")
     class GetOrderById {
 
