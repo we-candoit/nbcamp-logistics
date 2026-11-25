@@ -450,6 +450,66 @@ class OrderTransactionServiceTest {
     }
 
     @Nested
+    @DisplayName("failRecompensation()")
+    class FailRecompensation {
+
+        //보상에 실패해 COMPENSATION_FAILED로 저장된 주문
+        private Order compensationFailedOrder() {
+            Order order = new Order(userId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", "문 앞에 놓아주세요");
+            order.compensationFailed();
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+            return order;
+        }
+
+        @Test
+        public void 재보상에_성공하면_FAILED로_변경한다() {
+            //given
+            Order order = compensationFailedOrder();
+
+            //when
+            orderTransactionService.failRecompensation(order.getId(), true);
+            em.flush();
+            em.clear();
+
+            //then
+            Order found = orderRepository.findById(order.getId()).orElseThrow();
+            assertThat(found.getStatus()).isEqualTo(OrderStatus.FAILED);
+            assertThat(found.getCompensationRetryCount()).isZero();
+        }
+
+        @Test
+        public void 재보상에_실패하면_상태는_그대로이고_증가한_재보상_실패_횟수를_반환한다() {
+            //given
+            Order order = compensationFailedOrder();
+            orderTransactionService.failRecompensation(order.getId(), false);
+            em.flush();
+            em.clear();
+
+            //when
+            int retryCount = orderTransactionService.failRecompensation(order.getId(), false);
+            em.flush();
+            em.clear();
+
+            //then
+            Order found = orderRepository.findById(order.getId()).orElseThrow();
+            assertThat(retryCount).isEqualTo(2);
+            assertThat(found.getCompensationRetryCount()).isEqualTo(2);
+            assertThat(found.getStatus()).isEqualTo(OrderStatus.COMPENSATION_FAILED);
+        }
+
+        @Test
+        public void 없는_주문이면_C404_예외가_발생한다() {
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.failRecompensation(UUID.randomUUID(), true))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
+        }
+    }
+
+    @Nested
     @DisplayName("revertCancel()")
     class RevertCancel {
 

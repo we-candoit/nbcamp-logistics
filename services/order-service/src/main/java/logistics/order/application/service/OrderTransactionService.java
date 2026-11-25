@@ -91,6 +91,21 @@ public class OrderTransactionService {
         }
     }
 
+    //재보상 결과에 따라 주문상태 변경, 재보상 성공 FAILED, 재보상 실패 횟수 증가
+    //스케줄러가 상한 도달 여부를 판단하도록 변경 후 재보상 실패 횟수 반환
+    @Transactional
+    public int failRecompensation(UUID orderId, boolean compensated) {
+        Order order = orderRepository.findByIdAndDeletedAtIsNull(orderId).orElseThrow(
+                () -> new CustomException(ErrorCode.C404_ORDER_NOT_FOUND));
+
+        if (compensated) {
+            order.failed();
+        } else {
+            order.compensationRetryFailed();
+        }
+        return order.getCompensationRetryCount();
+    }
+
     //주문ID를 사용하여 주문과 주문상품 삭제 되돌림, 삭제된 주문도 조회
     @Transactional
     public void revertDelete(UUID orderId) {

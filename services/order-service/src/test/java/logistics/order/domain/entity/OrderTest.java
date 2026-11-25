@@ -344,6 +344,47 @@ class OrderTest {
     }
 
     @Nested
+    @DisplayName("compensationRetryFailed()")
+    class CompensationRetryFailed {
+
+        @Test
+        public void 생성_직후_재보상_실패_횟수는_0이다() {
+            //when, then
+            assertThat(createOrder().getCompensationRetryCount()).isZero();
+        }
+
+        @Test
+        public void 보상실패_주문은_호출할_때마다_재보상_실패_횟수가_1씩_증가한다() {
+            //given
+            Order order = createOrder();
+            order.compensationFailed();
+
+            //when
+            order.compensationRetryFailed();
+            order.compensationRetryFailed();
+
+            //then
+            assertThat(order.getCompensationRetryCount()).isEqualTo(2);
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.COMPENSATION_FAILED);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = OrderStatus.class, names = "COMPENSATION_FAILED", mode = EnumSource.Mode.EXCLUDE)
+        public void 보상실패가_아닌_주문은_재보상_실패_횟수가_그대로다(OrderStatus status) {
+            //given
+            Order order = createOrder();
+            ReflectionTestUtils.setField(order, "status", status);
+
+            //when
+            order.compensationRetryFailed();
+
+            //then
+            assertThat(order.getCompensationRetryCount()).isZero();
+            assertThat(order.getStatus()).isEqualTo(status);
+        }
+    }
+
+    @Nested
     @DisplayName("isCancelable()")
     class IsCancelable {
 
