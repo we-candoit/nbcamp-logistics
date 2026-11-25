@@ -36,6 +36,7 @@ order:
     fixed-delay-ms: 30000 #이전 실행이 끝난 뒤 30초 대기
     batch-size: 50 #한 번에 재보상할 최대 주문 수
     max-retry-count: 5 #재보상 실패 횟수 상한 / 도달하면 수동 처리 대상
+    stale-waiting-minutes: 10 #생성 후 이 시간이 지나도 WAITING이면 재보상 대상으로 전환 (주문생성 중 서버 종료)
     #외부 호출 헤더, 감사 정보에 쓰는 시스템 사용자 / 기본값은 더미 데이터의 MASTER 계정
     system-user-id: ${SYSTEM_USER_ID:11111111-1111-1111-1111-111111111111}
     system-user-role: MASTER

@@ -6,8 +6,13 @@ import logistics.order.domain.entity.Order;
 import logistics.order.domain.entity.OrderItem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.web.context.request.RequestContextHolder;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -19,6 +24,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -32,8 +38,58 @@ class CompensationRetrySchedulerTest {
     private final OrderCompensator orderCompensator = mock(OrderCompensator.class);
     private final UUID systemUserId = UUID.randomUUID();
 
+    //기준시각 계산을 확인하기 위해 현재 시각 고정
+    private final LocalDateTime now = LocalDateTime.of(2026, 11, 25, 12, 0);
+    private final Clock clock = Clock.fixed(now.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
+
     private final CompensationRetryScheduler scheduler = new CompensationRetryScheduler(
-            orderTransactionService, orderCompensator, systemUserId, "MASTER", MAX_RETRY_COUNT, BATCH_SIZE);
+            orderTransactionService, orderCompensator, systemUserId, "MASTER", MAX_RETRY_COUNT, BATCH_SIZE,
+            Duration.ofMinutes(10), clock);
+
+    @Test
+    public void 생성_후_10분이_지난_WAITING_주문을_전환한_뒤_재보상_대상을_조회한다() {
+        //given
+        InOrder inOrder = inOrder(orderTransactionService);
+
+        //when
+        scheduler.retry();
+
+        //then
+        inOrder.verify(orderTransactionService).markStaleWaitingAsCompensationFailed(now.minusMinutes(10));
+        inOrder.verify(orderTransactionService).findRecompensationTargets(MAX_RETRY_COUNT, BATCH_SIZE);
+    }
+
+    @Test
+    public void WAITING_주문_전환도_시스템_사용자로_실행한다() {
+        //given
+        List<UUID> userIds = new ArrayList<>();
+        given(orderTransactionService.markStaleWaitingAsCompensationFailed(any())).willAnswer(invocation -> {
+            userIds.add(AuthContext.getUserId());
+            return List.of();
+        });
+
+        //when
+        scheduler.retry();
+
+        //then
+        assertThat(userIds).containsExactly(systemUserId);
+    }
+
+    @Test
+    public void WAITING_주문_전환에_실패해도_재보상은_진행한다() {
+        //given
+        OrderItem target = compensationFailedOrderItem();
+        given(orderTransactionService.markStaleWaitingAsCompensationFailed(any()))
+                .willThrow(new RuntimeException("DB 오류"));
+        given(orderTransactionService.findRecompensationTargets(MAX_RETRY_COUNT, BATCH_SIZE))
+                .willReturn(List.of(target));
+
+        //when
+        scheduler.retry();
+
+        //then
+        verify(orderCompensator).recompensateCreate(target, MAX_RETRY_COUNT);
+    }
 
     @AfterEach
     void tearDown() {
