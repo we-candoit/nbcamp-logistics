@@ -67,6 +67,8 @@ public class OrderCompensator {
     private boolean rollbackCreate(CreateOrderProgress progress) {
         UUID orderId = progress.getOrderId();
         boolean compensated = true;
+        log.info("주문 보상 시작 orderId={} stockDecreaseRequested={} deliveryCreateRequested={}",
+                orderId, progress.isStockDecreaseRequested(), progress.isDeliveryCreateRequested());
 
         //배송생성을 요청했다면 생성 여부와 관계없이 주문ID로 취소/삭제 (배송이 없으면 이후 생성을 차단)
         if (progress.isDeliveryCreateRequested()) {
@@ -75,6 +77,7 @@ public class OrderCompensator {
         if (progress.isStockDecreaseRequested()) {
             compensated &= rollbackStock(progress);
         }
+        log.info("주문 보상 종료 orderId={} compensated={}", orderId, compensated);
         return compensated;
     }
 
@@ -93,6 +96,7 @@ public class OrderCompensator {
             log.info("이미 삭제된 배송이라 배송취소/삭제 생략 orderId={}", orderId);
             return true;
         }
+        log.info("주문 보상 완료 orderId={} action={}", orderId, "배송취소");
         return compensate(orderId, "배송삭제", () -> clientService.deleteDeliveryByOrderId(orderId));
     }
 
@@ -114,6 +118,7 @@ public class OrderCompensator {
             log.info("차감된 재고가 없어 재고복구 생략 orderId={}", orderId);
             return true;
         }
+        log.info("재고차감 확인됨, 재고복구 진행 orderId={}", orderId);
         return compensate(orderId, "재고복구", () -> clientService.restoreStock(
                 progress.getHubId(), progress.getItemId(), progress.getQuantity(), orderId));
     }
@@ -122,6 +127,7 @@ public class OrderCompensator {
     private boolean compensate(UUID orderId, String action, Runnable compensation) {
         try {
             compensation.run();
+            log.info("주문 보상 완료 orderId={} action={}", orderId, action);
             return true;
         } catch (RuntimeException e) {
             log.error("주문 보상 최종 실패 orderId={} action={}", orderId, action, e);

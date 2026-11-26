@@ -52,6 +52,8 @@ public class OrderService {
             order.confirm(delivery.getDeliveryId());
             orderTransactionService.save(order, orderItem);
         } catch (RuntimeException e) {
+            //보상 로그와 함께 볼 실패 원인 (예외 종류, 메시지)
+            log.warn("주문생성 실패 orderId={} cause={}: {}", order.getId(), e.getClass().getSimpleName(), e.getMessage());
             orderCompensator.compensateCreate(progress);
             clientService.sendSlackDm(user.getSlackId(), orderMessage("주문 실패", orderItem));
             throw e;
