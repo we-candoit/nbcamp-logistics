@@ -1,6 +1,7 @@
 package logistics.order.infrastructure;
 
 import feign.RequestTemplate;
+import logistics.order.common.AuthContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -62,6 +63,18 @@ class FeignRequestInterceptorTest {
 
             assertThat(template.headers().get(USER_ID)).containsExactly(userId.toString());
             assertThat(template.headers()).doesNotContainKey(ROLE);
+        }
+
+        @Test
+        @DisplayName("요청 컨텍스트가 없어도 시스템 사용자로 실행 중이면 시스템 사용자 헤더가 추가된다")
+        void apply_asSystemWithoutRequestContext() {
+            RequestContextHolder.resetRequestAttributes();
+            UUID systemUserId = UUID.randomUUID();
+
+            AuthContext.runAsSystem(systemUserId, "MASTER", () -> interceptor.apply(template));
+
+            assertThat(template.headers().get(USER_ID)).containsExactly(systemUserId.toString());
+            assertThat(template.headers().get(ROLE)).containsExactly("MASTER");
         }
 
         @Test

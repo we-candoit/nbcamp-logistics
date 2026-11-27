@@ -2,6 +2,7 @@ package logistics.order.application.service;
 
 import jakarta.persistence.EntityManager;
 import logistics.order.application.validator.OrderValidator;
+import logistics.order.common.AuthContext;
 import logistics.order.common.AuthHeaders;
 import logistics.order.config.AuditingConfig;
 import logistics.order.domain.entity.Order;
@@ -446,6 +447,235 @@ class OrderTransactionServiceTest {
                     .isInstanceOf(CustomException.class)
                     .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
                             .isEqualTo(ErrorCode.C409_INVALID_ORDER_STATUS));
+        }
+    }
+
+    @Nested
+    @DisplayName("markStaleWaitingAsCompensationFailed()")
+    class MarkStaleWaitingAsCompensationFailed {
+
+        private final LocalDateTime threshold = LocalDateTime.of(2026, 10, 1, 12, 0);
+
+        //지정한 상태와 생성시각으로 저장
+        private Order savedOrder(OrderStatus status, LocalDateTime createdAt) {
+            Order order = new Order(userId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", "문 앞에 놓아주세요");
+            ReflectionTestUtils.setField(order, "status", status);
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            //createdAt은 updatable = false라 엔티티로는 변경 불가 → native query로 변경
+            em.createNativeQuery("update p_orders set created_at = :createdAt where id = :id")
+                    .setParameter("createdAt", createdAt)
+                    .setParameter("id", order.getId())
+                    .executeUpdate();
+            em.clear();
+            return order;
+        }
+
+        private Order findOrder(UUID orderId) {
+            return orderRepository.findById(orderId).orElseThrow();
+        }
+
+        @Test
+        public void 기준시각_이전에_생성된_WAITING_주문만_COMPENSATION_FAILED로_전환하고_주문ID를_반환한다() {
+            //given
+            Order stale = savedOrder(OrderStatus.WAITING, threshold.minusMinutes(1));
+            Order recent = savedOrder(OrderStatus.WAITING, threshold.plusMinutes(1));
+            Order confirmed = savedOrder(OrderStatus.CONFIRMED, threshold.minusMinutes(1));
+
+            //when
+            List<UUID> result = orderTransactionService.markStaleWaitingAsCompensationFailed(threshold);
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(result).containsExactly(stale.getId());
+            assertThat(findOrder(stale.getId()).getStatus()).isEqualTo(OrderStatus.COMPENSATION_FAILED);
+            assertThat(findOrder(recent.getId()).getStatus()).isEqualTo(OrderStatus.WAITING);
+            assertThat(findOrder(confirmed.getId()).getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @Test
+        public void 전환한_주문의_수정자는_현재_사용자로_기록된다() {
+            //given
+            Order stale = savedOrder(OrderStatus.WAITING, threshold.minusMinutes(1));
+            UUID systemUserId = UUID.randomUUID();
+
+            //when
+            AuthContext.runAsSystem(systemUserId, "MASTER",
+                    () -> orderTransactionService.markStaleWaitingAsCompensationFailed(threshold));
+            em.flush();
+            em.clear();
+
+            //then
+            assertThat(findOrder(stale.getId()).getUpdatedBy()).isEqualTo(systemUserId);
+        }
+
+        @Test
+        public void 조회_후_상태가_바뀐_주문은_전환하지_않는다() {
+            //given
+            //조회 시점엔 WAITING이었지만 전환 전에 주문이 확정된 경우 → 조건부 UPDATE로 0건
+            Order stale = savedOrder(OrderStatus.WAITING, threshold.minusMinutes(1));
+            em.createNativeQuery("update p_orders set status = 'CONFIRMED' where id = :id")
+                    .setParameter("id", stale.getId())
+                    .executeUpdate();
+
+            //when
+            int updated = orderRepository.updateStatusIfCurrent(stale.getId(), OrderStatus.WAITING,
+                    OrderStatus.COMPENSATION_FAILED, LocalDateTime.now(), userId);
+            em.clear();
+
+            //then
+            assertThat(updated).isZero();
+            assertThat(findOrder(stale.getId()).getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @Test
+        public void 대상이_없으면_빈_목록을_반환한다() {
+            //given
+            savedOrder(OrderStatus.WAITING, threshold.plusMinutes(1));
+
+            //when, then
+            assertThat(orderTransactionService.markStaleWaitingAsCompensationFailed(threshold)).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("findRecompensationTargets()")
+    class FindRecompensationTargets {
+
+        private static final int MAX_RETRY_COUNT = 5;
+
+        //COMPENSATION_FAILED 주문을 재보상 실패 횟수와 생성시각을 지정해 저장
+        private Order savedCompensationFailedOrder(int retryCount, LocalDateTime createdAt) {
+            Order order = new Order(userId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", "문 앞에 놓아주세요");
+            order.compensationFailed();
+            ReflectionTestUtils.setField(order, "compensationRetryCount", retryCount);
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            setCreatedAt(order, createdAt);
+            return order;
+        }
+
+        //createdAt은 updatable = false라 엔티티로는 변경 불가 → native query로 변경
+        private void setCreatedAt(Order order, LocalDateTime createdAt) {
+            em.createNativeQuery("update p_orders set created_at = :createdAt where id = :id")
+                    .setParameter("createdAt", createdAt)
+                    .setParameter("id", order.getId())
+                    .executeUpdate();
+        }
+
+        private List<UUID> orderIds(List<OrderItem> orderItems) {
+            return orderItems.stream().map(oi -> oi.getOrder().getId()).toList();
+        }
+
+        @Test
+        public void COMPENSATION_FAILED이고_재보상_실패_횟수가_상한_미만인_주문만_오래된_순으로_조회한다() {
+            //given
+            Order latest = savedCompensationFailedOrder(MAX_RETRY_COUNT - 1, LocalDateTime.of(2026, 10, 3, 12, 0));
+            Order oldest = savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 1, 12, 0));
+            savedCompensationFailedOrder(MAX_RETRY_COUNT, LocalDateTime.of(2026, 10, 2, 12, 0));
+            //다른 상태의 주문은 제외
+            Order confirmed = confirmedOrder();
+            orderTransactionService.save(confirmed, orderItem(confirmed));
+            em.flush();
+            em.clear();
+
+            //when
+            List<OrderItem> result = orderTransactionService.findRecompensationTargets(MAX_RETRY_COUNT, 50);
+
+            //then
+            assertThat(orderIds(result)).containsExactly(oldest.getId(), latest.getId());
+            //재보상에 필요한 주문 정보를 함께 조회
+            assertThat(Hibernate.isInitialized(result.get(0).getOrder())).isTrue();
+        }
+
+        @Test
+        public void 삭제된_주문은_조회하지_않는다() {
+            //given
+            Order order = savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 1, 12, 0));
+            em.createNativeQuery("update p_orders set deleted_at = :deletedAt where id = :id")
+                    .setParameter("deletedAt", LocalDateTime.of(2026, 10, 2, 12, 0))
+                    .setParameter("id", order.getId())
+                    .executeUpdate();
+            em.clear();
+
+            //when, then
+            assertThat(orderTransactionService.findRecompensationTargets(MAX_RETRY_COUNT, 50)).isEmpty();
+        }
+
+        @Test
+        public void 최대_limit건까지_오래된_순으로_조회한다() {
+            //given
+            Order first = savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 1, 12, 0));
+            Order second = savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 2, 12, 0));
+            savedCompensationFailedOrder(0, LocalDateTime.of(2026, 10, 3, 12, 0));
+            em.clear();
+
+            //when
+            List<OrderItem> result = orderTransactionService.findRecompensationTargets(MAX_RETRY_COUNT, 2);
+
+            //then
+            assertThat(orderIds(result)).containsExactly(first.getId(), second.getId());
+        }
+    }
+
+    @Nested
+    @DisplayName("failRecompensation()")
+    class FailRecompensation {
+
+        //보상에 실패해 COMPENSATION_FAILED로 저장된 주문
+        private Order compensationFailedOrder() {
+            Order order = new Order(userId, UUID.randomUUID(), UUID.randomUUID(), "서울시 강남구", "문 앞에 놓아주세요");
+            order.compensationFailed();
+            orderTransactionService.save(order, orderItem(order));
+            em.flush();
+            em.clear();
+            return order;
+        }
+
+        @Test
+        public void 재보상에_성공하면_FAILED로_변경한다() {
+            //given
+            Order order = compensationFailedOrder();
+
+            //when
+            orderTransactionService.failRecompensation(order.getId(), true);
+            em.flush();
+            em.clear();
+
+            //then
+            Order found = orderRepository.findById(order.getId()).orElseThrow();
+            assertThat(found.getStatus()).isEqualTo(OrderStatus.FAILED);
+            assertThat(found.getCompensationRetryCount()).isZero();
+        }
+
+        @Test
+        public void 재보상에_실패하면_상태는_그대로이고_증가한_재보상_실패_횟수를_반환한다() {
+            //given
+            Order order = compensationFailedOrder();
+            orderTransactionService.failRecompensation(order.getId(), false);
+            em.flush();
+            em.clear();
+
+            //when
+            int retryCount = orderTransactionService.failRecompensation(order.getId(), false);
+            em.flush();
+            em.clear();
+
+            //then
+            Order found = orderRepository.findById(order.getId()).orElseThrow();
+            assertThat(retryCount).isEqualTo(2);
+            assertThat(found.getCompensationRetryCount()).isEqualTo(2);
+            assertThat(found.getStatus()).isEqualTo(OrderStatus.COMPENSATION_FAILED);
+        }
+
+        @Test
+        public void 없는_주문이면_C404_예외가_발생한다() {
+            //when, then
+            assertThatThrownBy(() -> orderTransactionService.failRecompensation(UUID.randomUUID(), true))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.C404_ORDER_NOT_FOUND));
         }
     }
 

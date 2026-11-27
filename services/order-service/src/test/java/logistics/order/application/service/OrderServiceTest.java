@@ -586,7 +586,7 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 재고감소에_실패하면_원인과_관계없이_재고복원을_요청하고_원래_예외를_전달한다() {
+        public void 재고부족으로_재고감소가_거절되면_차감을_다시_확인하고_재고복원_없이_FAILED로_변경한다() {
             //given
             FeignException stockError = new FeignException.Conflict("재고가 부족합니다.", feignRequest(), null, null);
             willThrow(stockError).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
@@ -594,16 +594,34 @@ class OrderServiceTest {
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
             UUID orderId = savedOrderId();
-            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            //정방향 1회 + 보상 차감확인 1회
+            verify(hubServiceClient, times(2)).decreaseStock(supplierHubId, itemId, quantity, orderId);
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
             verifyNoInteractions(deliveryServiceClient);
+            verify(orderTransactionService).failCreate(orderId, true);
         }
 
         @Test
-        public void 재고감소가_타임아웃이어도_재고복원에_성공하면_FAILED로_변경한다() {
+        public void 재고가_없어_재고감소가_거절되면_재고복원_없이_FAILED로_변경한다() {
             //given
-            //실제로는 차감됐지만 응답을 받지 못한 경우 → 복원 성공
+            FeignException notFound = new FeignException.NotFound("최초 재고 등록이 필요합니다.", feignRequest(), null, null);
+            willThrow(notFound).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(notFound);
+            UUID orderId = savedOrderId();
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
+            verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 재고감소가_타임아웃이고_실제로_차감됐으면_차감확인_후_재고를_복원하고_FAILED로_변경한다() {
+            //given
+            //정방향은 응답을 받지 못했지만 실제로는 차감됨 → 차감확인 요청에 hub-service가 이전 결과 반환
             RetryableException timeout = new RetryableException(-1, "Read timed out", Request.HttpMethod.POST, (Long) null, feignRequest());
-            willThrow(timeout).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
+            given(hubServiceClient.decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
+                    .willThrow(timeout)
+                    .willReturn(new StockResponse());
 
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(timeout);
@@ -613,17 +631,49 @@ class OrderServiceTest {
         }
 
         @Test
-        public void 차감되지_않아_재고복원이_거절되면_COMPENSATION_FAILED로_변경한다() {
+        public void 재고감소가_타임아웃이고_차감확인이_거절되면_재고복원_없이_FAILED로_변경한다() {
             //given
-            FeignException stockError = new FeignException.Conflict("재고가 부족합니다.", feignRequest(), null, null);
-            willThrow(stockError).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
-            //차감 기록이 없는 복원은 hub-service에서 409
-            given(hubServiceClient.restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
-                    .willThrow(new FeignException.Conflict("해당 주문에 대한 재고 차감 기록이 없습니다.", feignRequest(), null, null));
+            //정방향이 실제로 반영되지 않은 경우 → 차감확인에서 재고부족 409
+            RetryableException timeout = new RetryableException(-1, "Read timed out", Request.HttpMethod.POST, (Long) null, feignRequest());
+            given(hubServiceClient.decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
+                    .willThrow(timeout)
+                    .willThrow(new FeignException.Conflict("재고가 부족합니다.", feignRequest(), null, null));
 
             //when, then
-            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(stockError);
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(timeout);
             UUID orderId = savedOrderId();
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
+            verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 차감확인도_타임아웃이면_재고복원_없이_COMPENSATION_FAILED로_변경한다() {
+            //given
+            //차감 여부를 확정할 수 없음 → 보상 실패
+            RetryableException timeout = new RetryableException(-1, "Read timed out", Request.HttpMethod.POST, (Long) null, feignRequest());
+            willThrow(timeout).given(hubServiceClient).decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(timeout);
+            UUID orderId = savedOrderId();
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
+            verify(orderTransactionService).failCreate(orderId, false);
+        }
+
+        @Test
+        public void 차감확인이_404_409가_아닌_4xx로_거절되면_COMPENSATION_FAILED로_변경한다() {
+            //given
+            //요청 자체가 잘못된 경우(401 등)는 차감 여부를 확정할 수 없음
+            FeignException deliveryError = feignException();
+            given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
+            given(hubServiceClient.decreaseStock(eq(supplierHubId), eq(itemId), eq(quantity), any()))
+                    .willReturn(new StockResponse())
+                    .willThrow(new FeignException.Unauthorized("요청 사용자 정보를 확인할 수 없습니다.", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
+            UUID orderId = savedOrderId();
+            verify(hubServiceClient, never()).restoreStock(any(), any(), any(), any());
             verify(orderTransactionService).failCreate(orderId, false);
         }
 
@@ -694,6 +744,7 @@ class OrderServiceTest {
             UUID orderId = savedOrderId();
             inOrder.verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
             inOrder.verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            inOrder.verify(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity, orderId);
             inOrder.verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
             inOrder.verify(orderTransactionService).failCreate(orderId, true);
         }
@@ -733,6 +784,40 @@ class OrderServiceTest {
         }
 
         @Test
+        public void 이미_삭제된_배송이면_배송삭제_없이_재고를_복구하고_FAILED로_변경한다() {
+            //given
+            //이전 보상에서 배송취소/삭제까지 끝난 경우 → 삭제된 배송의 취소는 배송 서비스에서 404
+            FeignException deliveryError = feignException();
+            given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
+            given(deliveryServiceClient.cancelDeliveryByOrderId(any()))
+                    .willThrow(new FeignException.NotFound("배송을 찾을 수 없습니다.", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
+            UUID orderId = savedOrderId();
+            verify(deliveryServiceClient, never()).deleteDeliveryByOrderId(any());
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            verify(orderTransactionService).failCreate(orderId, true);
+        }
+
+        @Test
+        public void 배송취소가_404가_아닌_4xx로_거절되면_배송삭제_없이_COMPENSATION_FAILED로_변경한다() {
+            //given
+            //이미 출발한 배송 등 취소할 수 없는 경우 → 되돌릴 수 없음
+            FeignException deliveryError = feignException();
+            given(deliveryServiceClient.createDelivery(any())).willThrow(deliveryError);
+            given(deliveryServiceClient.cancelDeliveryByOrderId(any()))
+                    .willThrow(new FeignException.Conflict("배송을 취소할 수 없습니다.", feignRequest(), null, null));
+
+            //when, then
+            assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
+            UUID orderId = savedOrderId();
+            verify(deliveryServiceClient, never()).deleteDeliveryByOrderId(any());
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            verify(orderTransactionService).failCreate(orderId, false);
+        }
+
+        @Test
         public void 주문상태_변경에_실패해도_원래_예외를_전달한다() {
             //given
             FeignException deliveryError = feignException();
@@ -742,6 +827,102 @@ class OrderServiceTest {
             //when, then
             assertThatThrownBy(() -> orderService.create(orderRequest())).isSameAs(deliveryError);
             verify(hubServiceClient).restoreStock(eq(supplierHubId), eq(itemId), eq(quantity), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("주문생성 재보상 - recompensateCreate()")
+    class RecompensateCreate {
+
+        private static final int MAX_RETRY_COUNT = 5;
+
+        private OrderItem orderItem;
+        private UUID orderId;
+
+        //보상에 실패해 COMPENSATION_FAILED로 저장된 주문
+        @BeforeEach
+        void setUp() {
+            Order order = new Order(userId, requesterId, requesterHubId, "서울시 강남구 테헤란로 1", "문 앞에 놓아주세요");
+            order.compensationFailed();
+            orderItem = new OrderItem(itemId, "생수 2L", price, quantity, supplierHubId, supplierId, order);
+            orderId = order.getId();
+
+            given(deliveryServiceClient.cancelDeliveryByOrderId(orderId))
+                    .willReturn(new CancelDeliveryResponse(orderId, deliveryId, "CANCELLED"));
+            given(hubServiceClient.decreaseStock(supplierHubId, itemId, quantity, orderId)).willReturn(new StockResponse());
+            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity, orderId)).willReturn(new StockResponse());
+        }
+
+        @Test
+        public void 어느_단계까지_진행됐는지_모르므로_모든_단계를_순서대로_보상하고_성공을_반영한다() {
+            //given
+            InOrder inOrder = inOrder(deliveryServiceClient, hubServiceClient, orderTransactionService);
+
+            //when
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+
+            //then
+            inOrder.verify(deliveryServiceClient).cancelDeliveryByOrderId(orderId);
+            inOrder.verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            inOrder.verify(hubServiceClient).decreaseStock(supplierHubId, itemId, quantity, orderId);
+            inOrder.verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            inOrder.verify(orderTransactionService).failRecompensation(orderId, true);
+        }
+
+        @Test
+        public void 배송이_생성되지_않은_주문은_생성차단_후_삭제하고_성공을_반영한다() {
+            //given
+            //재고감소 단계에서 실패해 배송을 요청하지 않았던 주문 → 배송 서비스는 생성차단으로 응답
+            given(deliveryServiceClient.cancelDeliveryByOrderId(orderId))
+                    .willReturn(new CancelDeliveryResponse(orderId, null, "CREATION_BLOCKED"));
+
+            //when
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+
+            //then
+            verify(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            verify(orderTransactionService).failRecompensation(orderId, true);
+        }
+
+        @Test
+        public void 보상_단계가_하나라도_실패하면_재보상_실패를_반영한다() {
+            //given
+            given(hubServiceClient.restoreStock(supplierHubId, itemId, quantity, orderId))
+                    .willThrow(feignException());
+            given(orderTransactionService.failRecompensation(orderId, false)).willReturn(1);
+
+            //when
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+
+            //then
+            verify(orderTransactionService).failRecompensation(orderId, false);
+        }
+
+        @Test
+        public void 재보상_실패_횟수가_상한에_도달해도_예외_없이_끝난다() {
+            //given
+            willThrow(feignException()).given(deliveryServiceClient).deleteDeliveryByOrderId(orderId);
+            given(orderTransactionService.failRecompensation(orderId, false)).willReturn(MAX_RETRY_COUNT);
+
+            //when
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+
+            //then
+            //배송삭제가 실패해도 재고 보상은 계속 수행
+            verify(hubServiceClient).restoreStock(supplierHubId, itemId, quantity, orderId);
+            verify(orderTransactionService).failRecompensation(orderId, false);
+        }
+
+        @Test
+        public void 재보상_결과_반영에_실패해도_예외를_던지지_않는다() {
+            //given
+            //상태가 COMPENSATION_FAILED로 남아 다음 재보상 대상이 됨
+            given(orderTransactionService.failRecompensation(orderId, true))
+                    .willThrow(new RuntimeException("DB 오류"));
+
+            //when, then
+            orderCompensator.recompensateCreate(orderItem, MAX_RETRY_COUNT);
+            verify(orderTransactionService).failRecompensation(orderId, true);
         }
     }
 

@@ -39,6 +39,9 @@ public class Order extends BaseEntity {
     @Column(length = 30, nullable = false)
     private OrderStatus status = OrderStatus.WAITING;
 
+    //재보상 실패 횟수 / 스케줄러는 상한까지만 재보상 / 기존 데이터에 컬럼 추가시 0으로 채움
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int compensationRetryCount = 0;
 
     @Builder
     public Order(UUID orderUserId, UUID requesterId, UUID destinationHubId, String address, String requestNote) {
@@ -100,10 +103,18 @@ public class Order extends BaseEntity {
         }
     }
 
-    //주문생성 실패, 보상이 모두 성공한 경우 WAITING 상태만 FAILED로 변경
+    //주문생성 실패, 보상이 모두 성공한 경우 WAITING, COMPENSATION_FAILED 상태만 FAILED로 변경
+    //COMPENSATION_FAILED는 재보상에 성공한 경우
     public void failed() {
-        if (OrderStatus.WAITING == this.status) {
+        if (OrderStatus.WAITING == this.status || OrderStatus.COMPENSATION_FAILED == this.status) {
             this.status = OrderStatus.FAILED;
+        }
+    }
+
+    //재보상 실패, COMPENSATION_FAILED 상태만 재보상 실패 횟수 증가
+    public void compensationRetryFailed() {
+        if (OrderStatus.COMPENSATION_FAILED == this.status) {
+            this.compensationRetryCount++;
         }
     }
 

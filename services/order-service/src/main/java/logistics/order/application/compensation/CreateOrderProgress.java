@@ -30,6 +30,15 @@ public class CreateOrderProgress {
         );
     }
 
+    //재보상(COMPENSATION_FAILED 주문)용 / 어느 단계까지 진행됐는지 모르므로 모든 단계를 요청한 것으로 기록
+    //보상 API는 모두 멱등이라 진행하지 않은 단계를 보상해도 결과가 같음
+    public static CreateOrderProgress forRecompensation(OrderItem orderItem) {
+        CreateOrderProgress progress = start(orderItem);
+        progress.markStockDecreaseRequested();
+        progress.markDeliveryCreateRequested();
+        return progress;
+    }
+
     //재고감소 요청 전에 기록 / 실패 원인(타임아웃, 재고 부족 등)과 관계없이 보상시 재고복원 대상에 포함
     public void markStockDecreaseRequested() {
         this.stockDecreaseRequested = true;

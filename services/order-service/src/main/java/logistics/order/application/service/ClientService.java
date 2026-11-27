@@ -64,6 +64,19 @@ public class ClientService {
         hubServiceClient.decreaseStock(hubId, itemId, quantity, orderId);
     }
 
+    //보상용 재고 차감 확인 / 같은 주문ID로 차감을 다시 요청해 차감 여부를 확정
+    //이미 차감된 주문이면 hub-service가 이전 결과를 반환하므로 true
+    //404 재고 없음, 409 재고 부족 등 거절이면 차감된 적 없음 → false
+    //그 외 4xx, 5xx, 타임아웃은 차감 여부를 알 수 없으므로 예외 전달
+    public boolean confirmStockDecreased(UUID hubId, UUID itemId, Long quantity, UUID orderId) {
+        try {
+            hubServiceClient.decreaseStock(hubId, itemId, quantity, orderId);
+            return true;
+        } catch (FeignException.NotFound | FeignException.Conflict e) {
+            return false;
+        }
+    }
+
     //재고 복구 / 같은 주문ID로 다시 요청해도 hub-service에서 한 번만 복구 (재시도 시 중복 복구 방지)
     public void restoreStock(UUID hubId, UUID itemId, Long quantity, UUID orderId) {
         hubServiceClient.restoreStock(hubId, itemId, quantity, orderId);
@@ -88,6 +101,21 @@ public class ClientService {
             }
 
             //응답 없음(-1), 5xx는 전역 처리기로 전달
+            throw e;
+        }
+    }
+
+    //보상용 배송취소 / 배송이 취소되거나 생성이 차단되면 true
+    //이미 삭제된 배송은 배송 서비스가 404로 응답 → 되돌릴 것이 없으므로 false
+    //그 외 실패(409 취소 불가, 5xx, 타임아웃)는 예외 전달
+    public boolean cancelDeliveryIfNotDeleted(UUID orderId) {
+        try {
+            cancelDeliveryByOrderId(orderId);
+            return true;
+        } catch (CustomException e) {
+            if (e.getErrorCode() == ErrorCode.C404_DELIVERY_NOT_FOUND) {
+                return false;
+            }
             throw e;
         }
     }

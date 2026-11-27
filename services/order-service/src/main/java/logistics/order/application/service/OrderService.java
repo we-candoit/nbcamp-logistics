@@ -37,21 +37,28 @@ public class OrderService {
         Order order = orderItem.getOrder();
         CreateOrderProgress progress = CreateOrderProgress.start(orderItem);
 
+        //실패 로그에 남길 진행 중인 단계
+        String step = "재고 차감";
         try {
             //재고감소 / 주문ID로 hub-service에서 중복 차감 방지
             progress.markStockDecreaseRequested();
             clientService.decreaseStock(orderItem.getDepartureHubId(), orderItem.getItemId(), orderItem.getQuantity(), order.getId());
 
             //배송생성
+            step = "배송 생성";
             progress.markDeliveryCreateRequested();
             CreateDeliveryResponse delivery = clientService.createDelivery(
                     CreateDeliveryRequest.of(order, orderItem, request.getRecipientName(), request.getRecipientPhone())
             );
 
             //주문확정 / CONFIRMED 상태
+            step = "주문 확정";
             order.confirm(delivery.getDeliveryId());
             orderTransactionService.save(order, orderItem);
         } catch (RuntimeException e) {
+            //보상 로그와 함께 볼 실패 원인 (실패한 단계, 예외 종류, 메시지)
+            log.warn("[주문생성] {} 실패 | orderId={} cause={}: {}",
+                    step, order.getId(), e.getClass().getSimpleName(), e.getMessage());
             orderCompensator.compensateCreate(progress);
             clientService.sendSlackDm(user.getSlackId(), orderMessage("주문 실패", orderItem));
             throw e;
@@ -121,7 +128,7 @@ public class OrderService {
             clientService.restoreStock(orderItem.getDepartureHubId(), orderItem.getItemId(), orderItem.getQuantity(),
                     orderItem.getOrder().getId());
         } catch (RuntimeException e) {
-            log.error("주문취소 재고복원 실패, 수동 처리 필요 orderId={} hubId={} itemId={} quantity={}",
+            log.error("[주문취소] 재고 복구 실패 → 수동 처리 필요 | orderId={} hubId={} itemId={} quantity={}",
                     orderItem.getOrder().getId(), orderItem.getDepartureHubId(),
                     orderItem.getItemId(), orderItem.getQuantity(), e);
         }
