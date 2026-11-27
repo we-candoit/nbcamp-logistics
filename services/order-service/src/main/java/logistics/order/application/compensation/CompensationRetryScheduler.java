@@ -81,11 +81,12 @@ public class CompensationRetryScheduler {
         try {
             List<UUID> markedOrderIds = orderTransactionService.markStaleWaitingAsCompensationFailed(threshold);
             for (UUID orderId : markedOrderIds) {
-                log.warn("오래된 WAITING 주문을 재보상 대상으로 전환 orderId={} threshold={}", orderId, threshold);
+                log.warn("[재보상] 멈춘 주문 전환 완료 (WAITING {}분 초과 → COMPENSATION_FAILED) | orderId={} threshold={}",
+                        staleWaiting.toMinutes(), orderId, threshold);
             }
         } catch (RuntimeException e) {
             //전환에 실패해도 기존 재보상 대상은 처리
-            log.error("오래된 WAITING 주문 전환 실패 threshold={}", threshold, e);
+            log.error("[재보상] 멈춘 주문 전환 실패 | threshold={}", threshold, e);
         }
     }
 
@@ -95,7 +96,7 @@ public class CompensationRetryScheduler {
         try {
             targets = orderTransactionService.findRecompensationTargets(maxRetryCount, batchSize);
         } catch (RuntimeException e) {
-            log.error("주문 재보상 대상 조회 실패", e);
+            log.error("[재보상] 대상 조회 실패", e);
             return;
         }
 
@@ -103,13 +104,13 @@ public class CompensationRetryScheduler {
         if (targets.isEmpty()) {
             return;
         }
-        log.info("주문 재보상 시작 대상={}건", targets.size());
+        log.info("[재보상] 대상 조회 완료 ({}건) | maxRetryCount={}", targets.size(), maxRetryCount);
 
         for (OrderItem target : targets) {
             try {
                 orderCompensator.recompensateCreate(target, maxRetryCount);
             } catch (RuntimeException e) {
-                log.error("주문 재보상 중 예외 orderId={}", target.getOrder().getId(), e);
+                log.error("[재보상] 실패 (예상하지 못한 예외) | orderId={}", target.getOrder().getId(), e);
             }
         }
     }
